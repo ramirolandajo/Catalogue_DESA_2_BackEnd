@@ -1,17 +1,16 @@
 
 ---
 
-### 📌 README  **Web de Compras**
+### 📌 README **Catálogo de Productos e Inventario**
 
 ```markdown
-# 🛒 Web de Compras
+# 📦 Catálogo de Productos e Inventario
 
-Este módulo representa la interfaz de e-commerce para los usuarios finales.  
-Gestiona usuarios, carritos, órdenes y pagos.
+Este módulo gestiona el **ABM de productos** y controla el **inventario en tiempo real**, reaccionando a los eventos del sistema.
 
 ## 🚀 Funcionalidades
-- Registro y autenticación de usuarios.
-- Carrito de compras.
-- Órdenes de compra.
-- Checkout y pagos.
-- Administración básica de usuarios.
+- Alta, baja y modificación de productos (nombre, precio, atributos, etc.).
+- Control de stock en tiempo real.
+- Liberación de stock por cancelación.
+- Descuento de stock al confirmar una compra.
+- Proceso batch para carga de productos (sin frontend).
