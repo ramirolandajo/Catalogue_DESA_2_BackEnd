@@ -6,7 +6,7 @@
 ```markdown
 # 🛒 Web de Compras
 
-Este módulo representa la **interfaz de e-commerce** para los usuarios finales.  
+Este módulo representa la interfaz de e-commerce para los usuarios finales.  
 Gestiona usuarios, carritos, órdenes y pagos.
 
 ## 🚀 Funcionalidades
