@@ -7,5 +7,5 @@ import ar.edu.uade.catalogue.model.Product;
 
 @Repository
 public interface ProductRepository  extends JpaRepository<Product,Integer>{
-    
+    //getProductByName?
 }
