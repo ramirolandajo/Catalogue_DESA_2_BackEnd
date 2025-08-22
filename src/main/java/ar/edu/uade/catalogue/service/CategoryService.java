@@ -1,7 +1,9 @@
 package ar.edu.uade.catalogue.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -30,6 +32,15 @@ public class CategoryService {
     public Category getCategoryByName(String name){
         Optional<Category> category = categoryRepository.findByName(name);
         return category.orElse(null);
+    }
+
+    public List<Category> geCategoriesByName(Set<String>categories){
+        List<Category> categoriesFounded = new ArrayList<>();
+
+        for (String name : categories) {
+            categoriesFounded.add(categoryRepository.findByName(name).get());
+        }
+        return categoriesFounded;
     }
     
     public Category createCategory(String name){

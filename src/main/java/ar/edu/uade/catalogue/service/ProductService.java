@@ -1,0 +1,105 @@
+package ar.edu.uade.catalogue.service;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
+
+import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.Category;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.DTO.ProductDTO;
+import ar.edu.uade.catalogue.repository.ProductRepository;
+
+@Service
+public class ProductService {
+
+    @Autowired
+    ProductRepository productRepository;
+    
+    @Autowired
+    BrandService brandService;
+
+    @Autowired
+    CategoryService categoryService;
+
+    public List<Product>getProducts(){
+        return productRepository.findAll();
+    }
+
+    public Product getProductByID(Integer id){
+        Optional<Product> productOptional = productRepository.findById(id);
+        return productOptional.orElse(null);
+    }
+
+    public Product createProduct(ProductDTO productDTO, MultipartFile file) throws Exception{
+
+        if (file.isEmpty()) {
+            throw new Exception("No cargo una imagen para el producto");
+        }
+        List<Category>categories = categoryService.geCategoriesByName(productDTO.getCategories());
+        Brand brand = brandService.getBrandByName(productDTO.getBrand());
+        byte[] image = file.getBytes();
+
+        Product productToSave = new Product();
+        
+        productToSave.setName(productDTO.getName());
+        productToSave.setDescription(productDTO.getDescription());
+        productToSave.setPrice(productDTO.getPrice());
+        productToSave.setStock(productDTO.getStock());
+        productToSave.setCalification(productDTO.getCalification());
+        productToSave.setCategories(categories);
+        productToSave.setBrand(brand);
+        productToSave.setImage(image);
+
+        return productRepository.save(productToSave);
+    }
+
+    public Product updateStockPostSale(Integer id, int amountBought){
+        Optional<Product> productOptional = productRepository.findById(id);
+        Product productToUpdate = productOptional.get();
+
+        int newStock = productToUpdate.getStock() - amountBought;
+        productToUpdate.setStock(newStock);
+
+        productRepository.save(productToUpdate);
+
+        return productToUpdate;
+    }
+    
+    public Product updateStock (Integer id, int newStock){
+        Optional<Product> productOptional = productRepository.findById(id);
+        Product productToUpdate = productOptional.get();
+        
+        productToUpdate.setStock(newStock);
+
+        productRepository.save(productToUpdate);
+        
+        return productToUpdate;
+    }
+
+    public Product updatePrice (Integer id, float newPrice){
+        Optional<Product> productOptional = productRepository.findById(id);
+        Product productToUpdate = productOptional.get();
+
+        productToUpdate.setPrice(newPrice); 
+
+        productRepository.save(productToUpdate);
+
+        return productToUpdate;
+    }
+
+    public boolean deleteProduct(Integer id){
+        try{
+            productRepository.deleteById(id);
+            return true;
+        }catch(EmptyResultDataAccessException e){
+            return false;
+        }
+    }
+}
