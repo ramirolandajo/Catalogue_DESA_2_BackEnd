@@ -1,5 +1,6 @@
 package ar.edu.uade.catalogue.model;
 
+import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -56,7 +57,7 @@ public class Product {
         joinColumns = @JoinColumn(name = "product_id"),
         inverseJoinColumns = @JoinColumn(name = "category_id")
     )
-    private Set<Category> categories;
+    private List<Category> categories;
 
     @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "brand_id")
