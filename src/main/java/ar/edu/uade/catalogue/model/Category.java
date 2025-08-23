@@ -1,9 +1,13 @@
 package ar.edu.uade.catalogue.model;
 
+import java.util.List;
+
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -25,4 +29,7 @@ public class Category {
     
     @Column(name = "name")
     private String name;
+    
+    @OneToMany(mappedBy="categories", cascade=CascadeType.ALL)
+    List<Product>products;
 }
