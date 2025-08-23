@@ -25,8 +25,12 @@ public class BrandService {
         return brandOptional.orElse(null);
     }
 
-    public Brand createBrand(String name){
-        Brand brand = new Brand(0,name);
+    public Brand getBrandByID(Integer id){
+        Optional<Brand> brandOptional = brandRepository.findById(id);
+        return brandOptional.orElse(null);
+    }
+
+    public Brand createBrand(Brand brand){
         return brandRepository.save(brand);
     }
 

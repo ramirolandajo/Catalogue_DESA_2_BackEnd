@@ -43,10 +43,8 @@ public class CategoryService {
         return categoriesFounded;
     }
     
-    public Category createCategory(String name){
+    public Category createCategory(Category category){
         //Asumimos sin dto xq es chico el objeto 
-        //id 0 xq es identity autoincrement
-        Category category = new Category(0,name); 
         return categoryRepository.save(category);
     }
 

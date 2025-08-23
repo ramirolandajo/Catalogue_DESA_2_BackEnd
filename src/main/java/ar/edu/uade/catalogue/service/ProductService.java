@@ -1,19 +1,17 @@
 package ar.edu.uade.catalogue.service;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
-
-import ar.edu.uade.catalogue.model.Brand;
-import ar.edu.uade.catalogue.model.Category;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
+import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.ProductRepository;
 
 @Service
@@ -60,6 +58,10 @@ public class ProductService {
         return productRepository.save(productToSave);
     }
 
+    public Product updateProduct(Integer id, String name, String description){
+            return  new Product();
+    }
+
     public Product updateStockPostSale(Integer id, int amountBought){
         Optional<Product> productOptional = productRepository.findById(id);
         Product productToUpdate = productOptional.get();
@@ -72,6 +74,18 @@ public class ProductService {
         return productToUpdate;
     }
     
+    public Product updateStockPostCancelation(Integer id, int amountReturned){
+        Optional<Product> productOptional = productRepository.findById(id);
+        Product productToUpdate = productOptional.get();
+
+        int newStock = productToUpdate.getStock() + amountReturned;
+
+        productToUpdate.setStock(newStock);
+
+        productRepository.save(productToUpdate);
+
+        return  productToUpdate;
+    }
     public Product updateStock (Integer id, int newStock){
         Optional<Product> productOptional = productRepository.findById(id);
         Product productToUpdate = productOptional.get();
