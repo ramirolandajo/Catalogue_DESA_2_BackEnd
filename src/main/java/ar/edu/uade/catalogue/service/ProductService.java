@@ -1,5 +1,8 @@
 package ar.edu.uade.catalogue.service;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,7 +44,7 @@ public class ProductService {
             throw new Exception("No cargo una imagen para el producto");
         }
         List<Category>categories = categoryService.geCategoriesForProductByID(productDTO.getCategories());
-        Brand brand = brandService.getBrandByName(productDTO.getBrand());
+        Brand brand = brandService.getBrandByID(productDTO.getBrand());
         byte[] image = file.getBytes();
 
         Product productToSave = new Product();
@@ -59,7 +62,30 @@ public class ProductService {
         return productRepository.save(productToSave);
     }
 
+    public boolean loadBactchFromCSV(MultipartFile csvFile) throws  IOException{
+        try(BufferedReader br = new BufferedReader(new InputStreamReader(csvFile.getInputStream()))){
+            String line;
+            while((line = br.readLine()) != null){
+                String[] data = line.split(",");
+                ProductDTO p = new ProductDTO();
+                p.setName(data[0]);
+                p.setDescription(data[1]);
+                p.setPrice(Float.parseFloat(data[2]));
+                p.setStock(Integer.parseInt(data[3]));
+                p.setCalification(Float.parseFloat(data[4]));
+                p.setCategories(List.of(Integer.valueOf(data[5])));//chequear que funcione
+                p.setBrand(Integer.valueOf(data[6]));
+                
+                createProduct(p, null);
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    } 
+
     public Product updateProduct(Integer id, String name, String description){
+            //DESARROLLAR
             return  new Product();
     }
 

@@ -20,5 +20,5 @@ public class ProductDTO {
     private int stock;
     private float calification;
     private List<Integer>categories;
-    private String brand;
+    private Integer brand;
 }
