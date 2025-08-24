@@ -3,7 +3,6 @@ package ar.edu.uade.catalogue.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -42,11 +41,11 @@ public class CategoryService {
         return category.orElse(null);
     }
 
-    public List<Category> geCategoriesByName(Set<String>categories){
+    public List<Category> geCategoriesForProductByID(List<Integer>categories){
         List<Category> categoriesFounded = new ArrayList<>();
 
-        for (String name : categories) {
-            categoriesFounded.add(categoryRepository.findByName(name).get());
+        for (Integer id : categories) {
+            categoriesFounded.add(categoryRepository.findById(id).get());
         }
         return categoriesFounded;
     }
@@ -54,6 +53,15 @@ public class CategoryService {
     public Category createCategory(Category category){
         //Asumimos sin dto xq es chico el objeto 
         return categoryRepository.save(category);
+    }
+
+    public void addProductToCategorys(Product product, List<Integer>categories){
+        for(Integer id : categories){
+            Optional<Category> categoryOptinal = categoryRepository.findById(id);
+            Category c = categoryOptinal.get();
+            List<Product> prodcutsFromCategory = c.getProducts();
+            prodcutsFromCategory.add(product);
+        }
     }
 
     public boolean deleteCategory(Integer id){

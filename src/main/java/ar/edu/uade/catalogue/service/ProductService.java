@@ -40,7 +40,7 @@ public class ProductService {
         if (file.isEmpty()) {
             throw new Exception("No cargo una imagen para el producto");
         }
-        List<Category>categories = categoryService.geCategoriesByName(productDTO.getCategories());
+        List<Category>categories = categoryService.geCategoriesForProductByID(productDTO.getCategories());
         Brand brand = brandService.getBrandByName(productDTO.getBrand());
         byte[] image = file.getBytes();
 
@@ -55,6 +55,7 @@ public class ProductService {
         productToSave.setBrand(brand);
         productToSave.setImage(image);
 
+        categoryService.addProductToCategorys(productToSave, productDTO.getCategories());
         return productRepository.save(productToSave);
     }
 
