@@ -8,6 +8,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.BrandRepository;
 
 @Service
@@ -18,6 +19,13 @@ public class BrandService {
 
     public List<Brand>getBrands(){
         return brandRepository.findAll().stream().toList();
+    }
+
+    public List<Product>getProductsFromBrand(Integer id){
+        Optional<Brand> brandOptional = brandRepository.findById(id);
+        Brand brand = brandOptional.get();
+
+        return brand.getProducts();
     }
 
     public Brand getBrandByName(String name){

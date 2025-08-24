@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.uade.catalogue.model.Category;
+import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.CategoryService;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
@@ -32,6 +33,16 @@ public class CategoryController {
             return new ResponseEntity<>(categories, HttpStatus.OK);
         } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        }
+    }
+
+    @GetMapping(value="/getProducts/{id}", produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<List<Product>>getProductsFromCategory(@PathVariable("id") Integer id){
+        try {
+            List<Product> productsFromCategory = categoryService.getAllProductsFromCategory(id);
+            return new ResponseEntity<>(productsFromCategory, HttpStatus.OK);
+        } catch (EmptyResultDataAccessException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
 

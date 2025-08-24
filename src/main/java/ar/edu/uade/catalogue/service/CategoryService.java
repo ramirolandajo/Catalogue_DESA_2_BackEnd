@@ -10,6 +10,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Category;
+import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.CategoryRepository;
 
 @Service
@@ -21,6 +22,13 @@ public class CategoryService {
     public List<Category>getCategories(){
         List<Category> categories = categoryRepository.findAll();
         return categories;
+    }
+
+    public List<Product> getAllProductsFromCategory(Integer id){
+        Optional<Category> categoryOptional = categoryRepository.findById(id);
+        Category category = categoryOptional.get();
+        
+        return category.getProducts();
     }
 
     public Category getCategoryByID(Integer id){

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.BrandService;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
@@ -30,6 +31,16 @@ public class BrandController {
         try {
             List<Brand> brands = brandService.getBrands();
             return new ResponseEntity<>(brands,HttpStatus.OK);
+        } catch (EmptyResultDataAccessException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @GetMapping(value="/getProducts/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<List<Product>>getProductsFromBrand(@PathVariable("id")Integer id){
+        try {
+            List<Product>productsFromBrand = brandService.getProductsFromBrand(id);
+            return new ResponseEntity<>(productsFromBrand, HttpStatus.OK);
         } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
