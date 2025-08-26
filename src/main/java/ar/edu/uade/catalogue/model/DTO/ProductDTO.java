@@ -1,6 +1,6 @@
 package ar.edu.uade.catalogue.model.DTO;
 
-import java.util.Set;
+import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -19,6 +19,6 @@ public class ProductDTO {
     private float price;
     private int stock;
     private float calification;
-    private Set<String>categories;
-    private String brand;
+    private List<Integer>categories;
+    private Integer brand;
 }
