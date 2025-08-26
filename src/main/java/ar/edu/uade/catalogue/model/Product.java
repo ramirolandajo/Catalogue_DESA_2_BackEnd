@@ -1,7 +1,6 @@
 package ar.edu.uade.catalogue.model;
 
 import java.util.List;
-import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -49,7 +48,7 @@ public class Product {
     private int stock;
 
     @Column(name = "calification")
-    private float calification;
+    private List<Review> calification;
     
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
     @JoinTable(
