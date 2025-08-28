@@ -2,17 +2,15 @@ package ar.edu.uade.catalogue.model;
 
 import java.util.List;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
-import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -45,7 +43,8 @@ public class Product {
     private int stock;
 
     @Column(name = "calification")
-    private List<Review> calification;
+    @OneToMany(mappedBy="product_id", cascade= CascadeType.ALL)
+    private List<Review> reviews;
     
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
     @JoinTable(
@@ -58,11 +57,21 @@ public class Product {
     @ManyToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "brand_id")
     private Brand brand;
+   
+    @Column(name = "images")
+    private List<String> image; //Solo links a las imgs
 
-    @Lob
-    @JsonIgnore
-    @Column(name = "image", columnDefinition = "LONGBLOB")
-    private byte[] image;
+    @Column(name="isNew")
+    private boolean isNew;
+
+    @Column(name="isBestSeller")
+    private boolean isBestSeller;
+
+    @Column(name="isFeatured")
+    private boolean isFeatured;
+
+    @Column(name="hero")
+    private boolean hero;
 
 
 @Override
@@ -73,8 +82,12 @@ public String toString(){
                         "descripcion: " + description +
                         "precio: " + price + 
                         "stock: " + stock + 
-                        "calificacion: " + calification + 
-                        "marca: " + brand;
+                        "calificacion: " + reviews + 
+                        "marca: " + brand + 
+                        "isNew: " + isNew + 
+                        "isBestSeller: " + isBestSeller +
+                        "isFeatured: " + isFeatured +
+                        "hero: " + hero;
 }
 
 }

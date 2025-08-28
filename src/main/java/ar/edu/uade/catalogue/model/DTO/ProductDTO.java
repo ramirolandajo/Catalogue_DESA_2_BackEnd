@@ -18,7 +18,12 @@ public class ProductDTO {
     private String description;
     private float price;
     private int stock;
-    private float calification;
-    private List<Integer>categories;
+    private List<Integer> reviews;
+    private List<Integer> categories;
     private Integer brand;
+    private List<String> images;
+    private boolean isNew;
+    private boolean isBestSeller;
+    private boolean isFeatured;
+    private boolean hero;
 }
