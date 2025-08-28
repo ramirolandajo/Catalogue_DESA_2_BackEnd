@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
+import ar.edu.uade.catalogue.model.DTO.ProductUpdateDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.ProductService;
 
@@ -52,9 +54,9 @@ public class ProductController {
     }
 
     @PostMapping(value="/create",consumes={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<?>createProduct(@RequestPart ProductDTO productDTO, @RequestPart MultipartFile file){
+    public ResponseEntity<?>createProduct(@RequestPart ProductDTO productDTO){
         try {
-            Product productSaved = productService.createProduct(productDTO, file);
+            Product productSaved = productService.createProduct(productDTO);
             return new ResponseEntity<>(productSaved,HttpStatus.CREATED);
         } catch (Exception e) {
             return new ResponseEntity<>(e.getMessage(),HttpStatus.CONFLICT);
@@ -71,9 +73,17 @@ public class ProductController {
         }
     }
 
-    //@putmapping updateProduct, completar
+    @PutMapping(value="/update", produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Product>updateProduct(@RequestPart ProductUpdateDTO productUpdateDTO){
+        try {
+            Product productUpdated = productService.updateProduct(productUpdateDTO);
+            return new ResponseEntity<>(productUpdated, HttpStatus.OK);
+        } catch (EmptyResultDataAccessException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
 
-    @PutMapping(value="/updateStockPostSale/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/updateStockPostSale/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>updateStockPostSale(@PathVariable("id")Integer id, @RequestParam int amountBought){
         try {
             Product productUpdated = productService.updateStockPostSale(id, amountBought);
@@ -83,7 +93,7 @@ public class ProductController {
         }
     }
 
-    @PutMapping(value="/updateStockPostCancelation/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/updateStockPostCancelation/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>updateStockPostCancelation(@PathVariable("id") Integer id, @RequestParam int amountReturned){
         try {
             Product productUpdated = productService.updateStockPostCancelation(id, amountReturned);
@@ -93,7 +103,7 @@ public class ProductController {
         }
     }
 
-    @PutMapping(value="/updateStock/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/updateStock/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>updateStock(@PathVariable("id") Integer id, @RequestParam int newStock){
         try {
             Product productUpdated = productService.updateStock(id, newStock);
@@ -103,7 +113,7 @@ public class ProductController {
         }
     }
 
-    @PutMapping(value="/updatePrice/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/updatePrice/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>updatePrice(@PathVariable("id") Integer id, @RequestParam float newPrice){
         try {
             Product productUpdated = productService.updatePrice(id, newPrice);

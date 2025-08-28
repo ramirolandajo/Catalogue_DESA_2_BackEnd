@@ -1,12 +1,8 @@
 package ar.edu.uade.catalogue.service;
 
-<<<<<<< HEAD
-
-=======
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
->>>>>>> 88ea793dac3751de51a2b7496dee22bc52e36903
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ar.edu.uade.catalogue.model.Brand;
 import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
+import ar.edu.uade.catalogue.model.DTO.ProductUpdateDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.ProductRepository;
 
@@ -42,31 +39,34 @@ public class ProductService {
         return productOptional.orElse(null);
     }
 
-    public Product createProduct(ProductDTO productDTO, MultipartFile file) throws Exception{
+    public Product createProduct(ProductDTO productDTO) throws Exception{
 
-        if (file.isEmpty()) {
-            throw new Exception("No cargo una imagen para el producto");
-        }
-        List<Category>categories = categoryService.geCategoriesForProductByID(productDTO.getCategories());
-        Brand brand = brandService.getBrandByID(productDTO.getBrand());
-        byte[] image = file.getBytes();
+        List<Category>categoriesToSave = categoryService.geCategoriesForProductByID(productDTO.getCategories());
+        Brand brandToSave = brandService.getBrandByID(productDTO.getBrand());
+        //Review reviewsToSave = reviewService.getReviews.... desarrollar
 
         Product productToSave = new Product();
         
+        productToSave.setId(productDTO.getId());
         productToSave.setName(productDTO.getName());
         productToSave.setDescription(productDTO.getDescription());
         productToSave.setPrice(productDTO.getPrice());
         productToSave.setStock(productDTO.getStock());
-        productToSave.setCalification(productDTO.getCalification());
-        productToSave.setCategories(categories);
-        productToSave.setBrand(brand);
-        productToSave.setImage(image);
+        //productToSave.setReviews(reviewsToSave);
+        productToSave.setCategories(categoriesToSave);
+        productToSave.setBrand(brandToSave);
+        productToSave.setImage(productDTO.getImages());
+        productToSave.setNew(productDTO.isNew());
+        productToSave.setBestSeller(productDTO.isBestSeller());
+        productToSave.setFeatured(productDTO.isFeatured());
+        productToSave.setHero(productDTO.isHero());
 
         categoryService.addProductToCategorys(productToSave, productDTO.getCategories());
         return productRepository.save(productToSave);
     }
 
     public boolean loadBactchFromCSV(MultipartFile csvFile) throws  IOException{
+        //Agregar validaciones y modificar para los nuevos atributos
         try(BufferedReader br = new BufferedReader(new InputStreamReader(csvFile.getInputStream()))){
             String line;
             while((line = br.readLine()) != null){
@@ -76,11 +76,11 @@ public class ProductService {
                 p.setDescription(data[1]);
                 p.setPrice(Float.parseFloat(data[2]));
                 p.setStock(Integer.parseInt(data[3]));
-                p.setCalification(Float.parseFloat(data[4]));
+                //p.setR(Float.parseFloat(data[4]));
                 p.setCategories(List.of(Integer.valueOf(data[5])));//chequear que funcione
                 p.setBrand(Integer.valueOf(data[6]));
                 
-                createProduct(p, null);
+                createProduct(p);
             }
             return true;
         } catch (Exception e) {
@@ -88,9 +88,25 @@ public class ProductService {
         }
     } 
 
-    public Product updateProduct(Integer id, String name, String description){
-            //DESARROLLAR
-            return  new Product();
+    public Product updateProduct(ProductUpdateDTO productUpdateDTO){
+        List<Category>categoriesToUpdate = categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
+        Brand brandToUpdate = brandService.getBrandByID(productUpdateDTO.getBrand());
+
+        Product productToUpdate = productRepository.getById(productUpdateDTO.getId());
+
+        productToUpdate.setName(productUpdateDTO.getName());
+        productToUpdate.setDescription(productUpdateDTO.getDescription());
+        productToUpdate.setPrice(productUpdateDTO.getPrice());
+        productToUpdate.setStock(productUpdateDTO.getStock());
+        productToUpdate.setCategories(categoriesToUpdate);
+        productToUpdate.setBrand(brandToUpdate);
+        productToUpdate.setImage(productUpdateDTO.getImages());
+        productToUpdate.setNew(productUpdateDTO.isNew());
+        productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
+        productToUpdate.setFeatured(productUpdateDTO.isFeatured());
+        productToUpdate.setHero(productUpdateDTO.isHero());
+        
+        return productRepository.save(productToUpdate);
     }
 
     public Product updateStockPostSale(Integer id, int amountBought){
