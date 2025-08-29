@@ -1,5 +1,7 @@
 package ar.edu.uade.catalogue.model;
 
+import java.util.List;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -26,6 +28,9 @@ public class Review {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
+    @Column(name="user") //data "falsa". Cuando se conecten los distintos modulos conectamos la info
+    public String user;
+
     @Column(name = "title")
     private String title;
 
@@ -38,4 +43,7 @@ public class Review {
     @ManyToOne
     @JoinColumn(name="product_id")
     Product product;
+
+    @Column(name="images")
+    private List<String> images;
 }
