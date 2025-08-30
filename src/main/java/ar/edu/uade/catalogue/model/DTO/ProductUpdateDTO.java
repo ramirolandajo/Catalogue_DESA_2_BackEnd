@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 public class ProductUpdateDTO {
 
-    private Integer id; // No se va a modificar. Solo para gettear el Product
+    private Integer id; // ID no se va a modificar. Solo para gettear el Product
     private String name;
     private String description;
     private float price;

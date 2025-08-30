@@ -3,6 +3,7 @@ package ar.edu.uade.catalogue.service;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,7 @@ import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
 import ar.edu.uade.catalogue.model.DTO.ProductUpdateDTO;
 import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.Review;
 import ar.edu.uade.catalogue.repository.ProductRepository;
 
 @Service
@@ -30,6 +32,9 @@ public class ProductService {
     @Autowired
     CategoryService categoryService;
 
+    @Autowired
+    ReviewService reviewService;
+
     public List<Product>getProducts(){
         return productRepository.findAll();
     }
@@ -43,7 +48,6 @@ public class ProductService {
 
         List<Category>categoriesToSave = categoryService.geCategoriesForProductByID(productDTO.getCategories());
         Brand brandToSave = brandService.getBrandByID(productDTO.getBrand());
-        //Review reviewsToSave = reviewService.getReviews.... desarrollar
 
         Product productToSave = new Product();
         
@@ -52,7 +56,7 @@ public class ProductService {
         productToSave.setDescription(productDTO.getDescription());
         productToSave.setPrice(productDTO.getPrice());
         productToSave.setStock(productDTO.getStock());
-        //productToSave.setReviews(reviewsToSave);
+        productToSave.setReviews(new ArrayList<>());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
         productToSave.setImage(productDTO.getImages());
@@ -91,13 +95,16 @@ public class ProductService {
     public Product updateProduct(ProductUpdateDTO productUpdateDTO){
         List<Category>categoriesToUpdate = categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
         Brand brandToUpdate = brandService.getBrandByID(productUpdateDTO.getBrand());
+        List<Review> reviews = reviewService.getReviewsByProductID(productUpdateDTO.getId());
 
-        Product productToUpdate = productRepository.getById(productUpdateDTO.getId());
+        Optional<Product> productOptional = productRepository.findById(productUpdateDTO.getId());
+        Product productToUpdate = productOptional.get();
 
         productToUpdate.setName(productUpdateDTO.getName());
         productToUpdate.setDescription(productUpdateDTO.getDescription());
         productToUpdate.setPrice(productUpdateDTO.getPrice());
         productToUpdate.setStock(productUpdateDTO.getStock());
+        productToUpdate.setReviews(reviews);
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setImage(productUpdateDTO.getImages());

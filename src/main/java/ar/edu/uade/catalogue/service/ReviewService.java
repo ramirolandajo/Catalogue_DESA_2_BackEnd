@@ -45,6 +45,11 @@ public class ReviewService {
         return reviewRepository.save(reviewToSave);
     }
 
+    public List<Review>getReviewsByProductID(Integer id){
+        List<Review> reviews = reviewRepository.findReviewsByProductID(id);
+        return reviews;
+    }
+
     public boolean deleteReview(Integer id){
         try{
             reviewRepository.deleteById(id);
