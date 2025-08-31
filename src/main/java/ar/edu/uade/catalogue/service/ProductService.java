@@ -1,9 +1,11 @@
 package ar.edu.uade.catalogue.service;
 
 import java.io.BufferedReader;
-import java.io.IOException;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -69,25 +71,89 @@ public class ProductService {
         return productRepository.save(productToSave);
     }
 
-    public boolean loadBactchFromCSV(MultipartFile csvFile) throws  IOException{
-        //Agregar validaciones y modificar para los nuevos atributos
-        try(BufferedReader br = new BufferedReader(new InputStreamReader(csvFile.getInputStream()))){
+    public boolean loadBactchFromCSV(MultipartFile csvFile) throws  Exception{
+       List<ProductDTO> products = new ArrayList<>();
+       File log = new File("log.txt");
+       FileWriter logWriter = new FileWriter(log);
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(csvFile.getInputStream()))) {
             String line;
-            while((line = br.readLine()) != null){
-                String[] data = line.split(",");
-                ProductDTO p = new ProductDTO();
-                p.setName(data[0]);
-                p.setDescription(data[1]);
-                p.setPrice(Float.parseFloat(data[2]));
-                p.setStock(Integer.parseInt(data[3]));
-                //p.setR(Float.parseFloat(data[4]));
-                p.setCategories(List.of(Integer.valueOf(data[5])));//chequear que funcione
-                p.setBrand(Integer.valueOf(data[6]));
+            int lineNumber = 0;
+
+            while ((line = br.readLine()) != null) {
+                lineNumber++;
+
                 
+                if (line.trim().isEmpty()) {
+                    logWriter.write("\nLinea " + lineNumber + " vacia");
+                    continue; //Ignora linea vacia
+                }
+
+                String[] data = line.split(",");
+
+                
+                if (data.length < 15) {
+                    //Chequea que tenga el formato y si no loguea
+                    logWriter.write(" \nCampos vacios en fila " + lineNumber + ": " + line);
+                    continue;
+                }
+
+                try {
+                    //Manejando lista de categorias e imagenes para setear
+                    String categoryString = data[5].trim();
+                    List<Integer> categories = Arrays.stream(categoryString.split(";"))
+                                                .map(String::trim)
+                                                .filter(s -> !s.isEmpty())
+                                                .map(Integer::parseInt)
+                                                .toList();
+                    
+                    String imageString = data[7].trim();
+                    List<String> images = Arrays.stream(imageString.split(";"))
+                                            .map(String::trim)
+                                            .filter(s-> !s.isEmpty())
+                                            .toList();
+                    
+                    Integer id = Integer.parseInt(data[0].trim());
+                    String name = data[1].trim();
+                    String description = data[2].trim();
+                    Float price = Float.parseFloat(data[3].trim());
+                    int stock = Integer.parseInt(data[4].trim());
+                    int brandID = Integer.parseInt(data[6].trim());
+                    boolean isNew = Boolean.parseBoolean(data[8].trim());
+                    boolean isBestSeller = Boolean.parseBoolean(data[9].trim());
+                    boolean isFeatured = Boolean.parseBoolean(data[10].trim());
+                    boolean hero = Boolean.parseBoolean(data[11].trim());
+                
+                    ProductDTO pDTO = new ProductDTO();
+                    pDTO.setId(id);
+                    pDTO.setName(name);
+                    pDTO.setDescription(description);
+                    pDTO.setPrice(price);
+                    pDTO.setStock(stock);
+                    pDTO.setCategories(categories);
+                    pDTO.setBrand(brandID);
+                    pDTO.setImages(images);
+                    pDTO.setNew(isNew);
+                    pDTO.setBestSeller(isBestSeller);
+                    pDTO.setFeatured(isFeatured);
+                    pDTO.setHero(hero);
+                    
+                    products.add(pDTO);
+
+                } catch (NumberFormatException e) {
+                    logWriter.write(" \nError al parsear número en fila " + lineNumber + ": " + line);
+                }
+            }
+        }
+
+        logWriter.close();
+
+        if (!products.isEmpty()) {
+            for (ProductDTO p : products) {
                 createProduct(p);
             }
             return true;
-        } catch (Exception e) {
+        } else {
             return false;
         }
     } 

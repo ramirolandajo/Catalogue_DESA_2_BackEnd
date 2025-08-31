@@ -18,7 +18,6 @@ public class ProductDTO {
     private String description;
     private float price;
     private int stock;
-    private List<Integer> reviews;
     private List<Integer> categories;
     private Integer brand;
     private List<String> images;
