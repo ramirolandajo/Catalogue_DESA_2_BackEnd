@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.DoubleStream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -226,6 +227,17 @@ public class ProductService {
         productRepository.save(productToUpdate);
 
         return productToUpdate;
+    }
+    
+    public Double calculateReview(Integer productID){
+        Optional<Product> productOptional = productRepository.findById(productID);
+        Product productToCalculateScore = productOptional.get();
+
+        List<Review> reviews = productToCalculateScore.getReviews();
+        
+        return reviews.isEmpty() ? 0.0 : reviews.stream()
+                                        .mapToDouble(Review::getScore)
+                                        .average().orElse(0.0);
     }
 
     public boolean deleteProduct(Integer id){
