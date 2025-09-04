@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.DoubleStream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -239,7 +238,7 @@ public class ProductService {
                                         .mapToDouble(Review::getScore)
                                         .average().orElse(0.0);
     }
-
+    
     public boolean deleteProduct(Integer id){
         try{
             productRepository.deleteById(id);

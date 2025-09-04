@@ -5,12 +5,13 @@ import java.util.List;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -27,8 +28,12 @@ import lombok.Setter;
 public class Product {
 
     @Id
-    @Column(name = "product_id")
-    private Integer id;
+    @GeneratedValue(strategy=GenerationType.IDENTITY)
+    @Column(name = "ID")
+    private Integer id; 
+
+    @Column(name="product_code", unique = true, nullable = false)
+    private Integer productCode;
 
     @Column(name = "name")
     private String name;
@@ -37,15 +42,21 @@ public class Product {
     private String description;
 
     @Column(name = "price")
-    private float price;
+    private float price; //con descuento
+
+    @Column(name="unit_price")
+    private float unitPrice; 
+    
+    @Column(name="discount")
+    private float discount;
 
     @Column(name = "stock")
     private int stock;
 
     @Column(name = "calification")
-    @OneToMany(mappedBy="product_id", cascade= CascadeType.ALL)
-    private List<Review> reviews;
-    
+    //@OneToMany(mappedBy="product_id", cascade= CascadeType.ALL)
+    private float calification;
+
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
     @JoinTable(
         name = "product_category",
@@ -73,6 +84,8 @@ public class Product {
     @Column(name="hero")
     private boolean hero;
 
+    @Column(name="active")
+    private boolean active;
 
 @Override
 public String toString(){
@@ -82,7 +95,7 @@ public String toString(){
                         "descripcion: " + description +
                         "precio: " + price + 
                         "stock: " + stock + 
-                        "calificacion: " + reviews + 
+                        "calificacion: "  + 
                         "marca: " + brand + 
                         "isNew: " + isNew + 
                         "isBestSeller: " + isBestSeller +

@@ -32,4 +32,7 @@ public class Brand {
 
     @OneToMany(mappedBy="brand", cascade=CascadeType.ALL)
     private List<Product>products;
+
+    @Column(name="active", nullable=false)
+    private boolean active;
 }

@@ -13,16 +13,20 @@ import lombok.Setter;
 @Setter
 public class ProductDTO {
 
-    private Integer id;
+    private Long id; //Long pra el ID
+    private Integer productCode;
     private String name;
     private String description;
     private float price;
+    private float unitPrice;
+    private float discount;
     private int stock;
-    private List<Integer> categories;
-    private Integer brand;
+    private List<CategoryDTO> categories;
+    private BrandDTO brand;
     private List<String> images;
     private boolean isNew;
     private boolean isBestSeller;
     private boolean isFeatured;
-    private boolean hero;
+    private boolean hero; 
+
 }

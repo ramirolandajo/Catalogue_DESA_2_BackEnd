@@ -1,13 +1,9 @@
 package ar.edu.uade.catalogue.model;
 
-import java.util.List;
-
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -23,13 +19,16 @@ import lombok.Setter;
 public class Category {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) //id a mano?
+    @GeneratedValue(strategy = GenerationType.IDENTITY) 
     @Column(name = "category_id")
     private Integer id;
     
     @Column(name = "name")
     private String name;
     
-    @OneToMany(mappedBy="categories", cascade=CascadeType.ALL)
-    List<Product>products;
+    /*@OneToMany(mappedBy="categories", cascade=CascadeType.ALL)
+    List<Product>products;*/
+
+    @Column(name="active", nullable=false)
+    private boolean active;
 }
