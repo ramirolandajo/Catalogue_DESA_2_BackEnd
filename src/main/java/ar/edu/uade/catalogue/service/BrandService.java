@@ -28,11 +28,6 @@ public class BrandService {
         return brand.getProducts();
     }
 
-    public Brand getBrandByName(String name){
-        Optional<Brand> brandOptional = brandRepository.findByName(name);
-        return brandOptional.orElse(null);
-    }
-
     public Brand getBrandByID(Integer id){
         Optional<Brand> brandOptional = brandRepository.findById(id);
         return brandOptional.orElse(null);
@@ -43,8 +38,14 @@ public class BrandService {
     }
 
     public boolean deleteBrand(Integer id){
+        //Borrado logico
         try{
-            brandRepository.deleteById(id);
+            Optional<Brand> brandOptional = brandRepository.findById(id);
+            Brand brandToDeactivate = brandOptional.get();
+           
+            brandToDeactivate.setActive(false);
+            brandRepository.save(brandToDeactivate);
+
             return true; 
         }catch(EmptyResultDataAccessException e){
             return false;

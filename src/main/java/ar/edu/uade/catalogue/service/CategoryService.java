@@ -32,13 +32,7 @@ public class CategoryService {
 
     public Category getCategoryByID(Integer id){
         Optional<Category> category = categoryRepository.findById(id);
-        return category.orElse(null); //Mejorar para evitar los null?
-        
-    }
-
-    public Category getCategoryByName(String name){
-        Optional<Category> category = categoryRepository.findByName(name);
-        return category.orElse(null);
+        return category.orElse(null);         
     }
 
     public List<Category> geCategoriesForProductByID(List<Integer>categories){
@@ -56,17 +50,27 @@ public class CategoryService {
     }
 
     public void addProductToCategorys(Product product, List<Integer>categories){
+        //cambiar a boolean el return para validar cuando se asigna en Product?
         for(Integer id : categories){
             Optional<Category> categoryOptinal = categoryRepository.findById(id);
             Category c = categoryOptinal.get();
+            
             List<Product> prodcutsFromCategory = c.getProducts();
             prodcutsFromCategory.add(product);
+            
+            categoryRepository.save(c);
         }
+        
     }
 
     public boolean deleteCategory(Integer id){
         try{
-            categoryRepository.deleteById(id);
+            Optional<Category> categoryOptional = categoryRepository.findById(id);
+            Category categoryToDeactivate = categoryOptional.get();
+
+            categoryToDeactivate.setActive(false);
+            categoryRepository.save(categoryToDeactivate);
+            
             return true;
         }catch(EmptyResultDataAccessException e){
             return false;
