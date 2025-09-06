@@ -1,5 +1,6 @@
 package ar.edu.uade.catalogue.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -8,6 +9,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.BrandRepository;
 
@@ -45,8 +47,14 @@ public class BrandService {
         brandRepository.save(brandToUpdate);        
     }
     
-    public Brand createBrand(Brand brand){
-        return brandRepository.save(brand);
+    public Brand createBrand(BrandDTO brandDTO){
+        Brand brandToSave = new Brand();
+        
+        brandToSave.setName(brandDTO.getName());
+        brandToSave.setProducts(new ArrayList<>());
+        brandToSave.setActive(brandDTO.isActive());
+        
+        return brandRepository.save(brandToSave);
     }
 
     public boolean deleteBrand(Integer id){

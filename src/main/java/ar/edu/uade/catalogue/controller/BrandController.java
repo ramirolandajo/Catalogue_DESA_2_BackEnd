@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.BrandService;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -46,7 +47,7 @@ public class BrandController {
         }
     }
 
-    @GetMapping(value="/getbrandByID/{id}", produces= {MediaType.APPLICATION_JSON_VALUE})
+    @GetMapping(value="/getBrandByID/{id}", produces= {MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Brand>getBrandByID(@PathVariable("id") Integer brandID){
         try {
             Brand brand = brandService.getBrandByID(brandID);
@@ -57,8 +58,8 @@ public class BrandController {
     }
 
     @PostMapping(value="/create", consumes={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Brand>createBrand(@RequestBody Brand brand){
-      Brand brandSaved = brandService.createBrand(brand);
+    public ResponseEntity<Brand>createBrand(@RequestBody BrandDTO brandDTO){
+      Brand brandSaved = brandService.createBrand(brandDTO);
       return  new ResponseEntity<>(brandSaved,HttpStatus.CREATED);
     }
 

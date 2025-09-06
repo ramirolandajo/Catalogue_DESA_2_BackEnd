@@ -10,7 +10,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class BrandDTO {
-    private Long id;
     private String name;
-    private Boolean active;    
+    private boolean active;    
 }
