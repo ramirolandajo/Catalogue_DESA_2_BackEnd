@@ -23,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.ProductService;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
 @RestController
 @RequestMapping(value="/products")
@@ -53,7 +54,7 @@ public class ProductController {
     }
 
     @PostMapping(value="/create",consumes={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<?>createProduct(@RequestPart ProductDTO productDTO){
+    public ResponseEntity<?>createProduct(@RequestBody ProductDTO productDTO){
         try {
             Product productSaved = productService.createProduct(productDTO);
             return new ResponseEntity<>(productSaved,HttpStatus.CREATED);
