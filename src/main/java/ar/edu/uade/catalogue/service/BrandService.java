@@ -33,6 +33,18 @@ public class BrandService {
         return brandOptional.orElse(null);
     }
 
+    public void addProductToBrand(Product product, Integer id){
+        Optional<Brand> brandOptional = brandRepository.findById(id);
+        Brand brandToUpdate = brandOptional.get();
+
+        List<Product>productsFromBrand = brandToUpdate.getProducts();
+        productsFromBrand.add(product);
+
+        brandToUpdate.setProducts(productsFromBrand);
+
+        brandRepository.save(brandToUpdate);        
+    }
+    
     public Brand createBrand(Brand brand){
         return brandRepository.save(brand);
     }
