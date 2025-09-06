@@ -36,6 +36,7 @@ public class CategoryService {
     }
 
     public List<Category> geCategoriesForProductByID(List<Integer>categories){
+        // No tiene endpoint porque es metodo interno que ayuda a la creacion del producto
         List<Category> categoriesFounded = new ArrayList<>();
 
         for (Integer id : categories) {
@@ -45,12 +46,12 @@ public class CategoryService {
     }
     
     public Category createCategory(Category category){
-        //Asumimos sin dto xq es chico el objeto 
+        // Asumimos sin dto xq es chico el objeto 
         return categoryRepository.save(category);
     }
 
     public void addProductToCategorys(Product product, List<Integer>categories){
-        //cambiar a boolean el return para validar cuando se asigna en Product?
+        // Cambiar a boolean el return para validar cuando se asigna en Product?
         for(Integer id : categories){
             Optional<Category> categoryOptinal = categoryRepository.findById(id);
             Category c = categoryOptinal.get();
@@ -70,7 +71,7 @@ public class CategoryService {
 
             categoryToDeactivate.setActive(false);
             categoryRepository.save(categoryToDeactivate);
-            
+
             return true;
         }catch(EmptyResultDataAccessException e){
             return false;
