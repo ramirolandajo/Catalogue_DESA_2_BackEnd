@@ -13,7 +13,6 @@ import lombok.Setter;
 @Setter
 public class ProductDTO {
 
-    private Integer id; //Long pra el ID
     private Integer productCode;
     private String name;
     private String description;
@@ -30,5 +29,4 @@ public class ProductDTO {
     private boolean isFeatured;
     private boolean hero; 
     private boolean active;
-
 }

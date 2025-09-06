@@ -17,9 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ar.edu.uade.catalogue.model.Brand;
 import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
-import ar.edu.uade.catalogue.model.DTO.ProductUpdateDTO;
 import ar.edu.uade.catalogue.model.Product;
-import ar.edu.uade.catalogue.model.Review;
 import ar.edu.uade.catalogue.repository.ProductRepository;
 
 @Service
@@ -34,15 +32,12 @@ public class ProductService {
     @Autowired
     CategoryService categoryService;
 
-    @Autowired
-    ReviewService reviewService;
-
     public List<Product>getProducts(){
         return productRepository.findAll();
     }
 
-    public Product getProductByID(Integer id){
-        Optional<Product> productOptional = productRepository.findById(id);
+    public Product getProductByProductCode(Integer productCode){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
         return productOptional.orElse(null);
     }
 
@@ -50,15 +45,20 @@ public class ProductService {
 
         List<Category>categoriesToSave = categoryService.geCategoriesForProductByID(productDTO.getCategories());
         Brand brandToSave = brandService.getBrandByID(productDTO.getBrand());
+        
+        // "Price" es con descuento. "unitPrice" precio por unidad sin descuento aplicado
+        float priceWithDiscount = productDTO.getUnitPrice() * (productDTO.getDiscount() / 100);
 
         Product productToSave = new Product();
         
-        productToSave.setId(productDTO.getId());
+        productToSave.setProductCode(productDTO.getProductCode());
         productToSave.setName(productDTO.getName());
         productToSave.setDescription(productDTO.getDescription());
-        productToSave.setPrice(productDTO.getPrice());
+        productToSave.setPrice(priceWithDiscount);
+        productToSave.setUnitPrice(productDTO.getUnitPrice());
+        productToSave.setDiscount(productDTO.getDiscount());
         productToSave.setStock(productDTO.getStock());
-        productToSave.setReviews(new ArrayList<>());
+        productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
         productToSave.setImage(productDTO.getImages());
@@ -66,8 +66,14 @@ public class ProductService {
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
         productToSave.setHero(productDTO.isHero());
+        productToSave.setActive(productDTO.isActive());
 
+        // Agregamos el producto a las categorias a las que pertenece
         categoryService.addProductToCategorys(productToSave, productDTO.getCategories());
+
+        // Agregamos el producto a la marca a la que pertenece
+        brandService.addProductToBrand(productToSave, productDTO.getBrand());
+
         return productRepository.save(productToSave);
     }
 
@@ -100,46 +106,53 @@ public class ProductService {
 
                 try {
                     //Manejando lista de categorias e imagenes para setear
-                    String categoryString = data[5].trim();
+                    String categoryString = data[7].trim();
                     List<Integer> categories = Arrays.stream(categoryString.split(";"))
                                                 .map(String::trim)
                                                 .filter(s -> !s.isEmpty())
                                                 .map(Integer::parseInt)
                                                 .toList();
                     
-                    String imageString = data[7].trim();
+                    String imageString = data[10].trim();
                     List<String> images = Arrays.stream(imageString.split(";"))
                                             .map(String::trim)
                                             .filter(s-> !s.isEmpty())
                                             .toList();
                     
-                    Integer id = Integer.parseInt(data[0].trim());
+                    Integer productCode = Integer.valueOf(data[0].trim());
                     String name = data[1].trim();
                     String description = data[2].trim();
-                    Float price = Float.parseFloat(data[3].trim());
-                    int stock = Integer.parseInt(data[4].trim());
-                    int brandID = Integer.parseInt(data[6].trim());
-                    boolean isNew = Boolean.parseBoolean(data[8].trim());
-                    boolean isBestSeller = Boolean.parseBoolean(data[9].trim());
-                    boolean isFeatured = Boolean.parseBoolean(data[10].trim());
-                    boolean hero = Boolean.parseBoolean(data[11].trim());
+                    Float price = Float.valueOf(data[3].trim());
+                    Float unitPrice = Float.valueOf(data[4].trim());
+                    Float discount = Float.valueOf(data[5].trim());
+                    int stock = Integer.parseInt(data[6].trim());
+                    int brandID = Integer.parseInt(data[8].trim());
+                    Float calification = Float.valueOf(data[9].trim());
+                    boolean isNew = Boolean.parseBoolean(data[11].trim());
+                    boolean isBestSeller = Boolean.parseBoolean(data[12].trim());
+                    boolean isFeatured = Boolean.parseBoolean(data[13].trim());
+                    boolean hero = Boolean.parseBoolean(data[14].trim());
+                    boolean active = Boolean.parseBoolean(data[15].trim());
                 
                     ProductDTO pDTO = new ProductDTO();
-                    pDTO.setId(id);
+                    pDTO.setProductCode(productCode);
                     pDTO.setName(name);
                     pDTO.setDescription(description);
                     pDTO.setPrice(price);
+                    pDTO.setUnitPrice(unitPrice);
+                    pDTO.setDiscount(discount);
                     pDTO.setStock(stock);
                     pDTO.setCategories(categories);
                     pDTO.setBrand(brandID);
+                    pDTO.setCalification(calification);
                     pDTO.setImages(images);
                     pDTO.setNew(isNew);
                     pDTO.setBestSeller(isBestSeller);
                     pDTO.setFeatured(isFeatured);
                     pDTO.setHero(hero);
+                    pDTO.setActive(active);
                     
                     products.add(pDTO);
-
                 } catch (NumberFormatException e) {
                     logWriter.write(" \nError al parsear número en fila " + lineNumber + ": " + line);
                 }
@@ -158,32 +171,34 @@ public class ProductService {
         }
     } 
 
-    public Product updateProduct(ProductUpdateDTO productUpdateDTO){
+    public Product updateProduct(ProductDTO productUpdateDTO){
         List<Category>categoriesToUpdate = categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
         Brand brandToUpdate = brandService.getBrandByID(productUpdateDTO.getBrand());
-        List<Review> reviews = reviewService.getReviewsByProductID(productUpdateDTO.getId());
 
-        Optional<Product> productOptional = productRepository.findById(productUpdateDTO.getId());
+        Optional<Product> productOptional = productRepository.findByProductCode(productUpdateDTO.getProductCode());
         Product productToUpdate = productOptional.get();
 
         productToUpdate.setName(productUpdateDTO.getName());
         productToUpdate.setDescription(productUpdateDTO.getDescription());
         productToUpdate.setPrice(productUpdateDTO.getPrice());
+        productToUpdate.setUnitPrice(productUpdateDTO.getUnitPrice());
+        productToUpdate.setDiscount(productUpdateDTO.getDiscount());
         productToUpdate.setStock(productUpdateDTO.getStock());
-        productToUpdate.setReviews(reviews);
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
+        productToUpdate.setCalification(productUpdateDTO.getCalification());
         productToUpdate.setImage(productUpdateDTO.getImages());
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());
         productToUpdate.setHero(productUpdateDTO.isHero());
+        productToUpdate.setActive(productUpdateDTO.isActive());
         
         return productRepository.save(productToUpdate);
     }
 
-    public Product updateStockPostSale(Integer id, int amountBought){
-        Optional<Product> productOptional = productRepository.findById(id);
+    public Product updateStockPostSale(Integer productCode, int amountBought){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
         Product productToUpdate = productOptional.get();
 
         int newStock = productToUpdate.getStock() - amountBought;
@@ -194,8 +209,8 @@ public class ProductService {
         return productToUpdate;
     }
     
-    public Product updateStockPostCancelation(Integer id, int amountReturned){
-        Optional<Product> productOptional = productRepository.findById(id);
+    public Product updateStockPostCancelation(Integer productCode, int amountReturned){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
         Product productToUpdate = productOptional.get();
 
         int newStock = productToUpdate.getStock() + amountReturned;
@@ -206,8 +221,8 @@ public class ProductService {
 
         return  productToUpdate;
     }
-    public Product updateStock (Integer id, int newStock){
-        Optional<Product> productOptional = productRepository.findById(id);
+    public Product updateStock (Integer productCode, int newStock){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
         Product productToUpdate = productOptional.get();
         
         productToUpdate.setStock(newStock);
@@ -217,31 +232,34 @@ public class ProductService {
         return productToUpdate;
     }
 
-    public Product updatePrice (Integer id, float newPrice){
-        Optional<Product> productOptional = productRepository.findById(id);
+    public Product updateUnitPrice (Integer productCode, float newPrice){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
         Product productToUpdate = productOptional.get();
 
-        productToUpdate.setPrice(newPrice); 
+        productToUpdate.setUnitPrice(newPrice);
 
         productRepository.save(productToUpdate);
 
         return productToUpdate;
     }
     
-    public Double calculateReview(Integer productID){
-        Optional<Product> productOptional = productRepository.findById(productID);
-        Product productToCalculateScore = productOptional.get();
+    public Product updateDiscount(Integer productCode, float newDiscount){
+        Optional<Product> productOptional = productRepository.findByProductCode(productCode);
+        Product productToUpdate = productOptional.get();
 
-        List<Review> reviews = productToCalculateScore.getReviews();
-        
-        return reviews.isEmpty() ? 0.0 : reviews.stream()
-                                        .mapToDouble(Review::getScore)
-                                        .average().orElse(0.0);
+        productToUpdate.setDiscount(newDiscount);
+
+       return productRepository.save(productToUpdate);
     }
-    
-    public boolean deleteProduct(Integer id){
+
+    public boolean deleteProduct(Integer productCode){
         try{
-            productRepository.deleteById(id);
+            Optional<Product> productOptional = productRepository.findByProductCode(productCode);
+            Product productToDiactivate = productOptional.get();
+
+            productToDiactivate.setActive(false);
+            productRepository.save(productToDiactivate);
+
             return true;
         }catch(EmptyResultDataAccessException e){
             return false;
