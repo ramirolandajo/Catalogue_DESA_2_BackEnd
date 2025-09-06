@@ -237,10 +237,12 @@ public class ProductService {
         Product productToUpdate = productOptional.get();
 
         productToUpdate.setUnitPrice(newPrice);
+        
+        float priceWithDiscount = newPrice * (productToUpdate.getDiscount() / 100);
 
-        productRepository.save(productToUpdate);
+        productToUpdate.setPrice(priceWithDiscount);
 
-        return productToUpdate;
+        return productRepository.save(productToUpdate);
     }
     
     public Product updateDiscount(Integer productCode, float newDiscount){
@@ -248,6 +250,10 @@ public class ProductService {
         Product productToUpdate = productOptional.get();
 
         productToUpdate.setDiscount(newDiscount);
+
+        float newPriceWithDiscount = productToUpdate.getUnitPrice() * (newDiscount / 100);
+
+        productToUpdate.setPrice(newPriceWithDiscount);
 
        return productRepository.save(productToUpdate);
     }

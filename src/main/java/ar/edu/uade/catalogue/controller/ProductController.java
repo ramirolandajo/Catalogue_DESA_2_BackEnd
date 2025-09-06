@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
-import ar.edu.uade.catalogue.model.DTO.ProductUpdateDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.ProductService;
 
@@ -43,10 +42,10 @@ public class ProductController {
         }
     }
 
-    @GetMapping(value="/getProductByID/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>getProductByID(@PathVariable("id")Integer id){
+    @GetMapping(value="/getProductByCode/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Product>getProductByID(@PathVariable("id")Integer productCode){
         try {
-            Product product = productService.getProductByID(id);
+            Product product = productService.getProductByProductCode(productCode);
             return new ResponseEntity<>(product,HttpStatus.OK);
         } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
@@ -64,7 +63,7 @@ public class ProductController {
     }
 
     @PostMapping(value="/upload")
-    public ResponseEntity<?>loadBatch(@RequestPart MultipartFile csvFile) throws IOException{
+    public ResponseEntity<?>loadBatch(@RequestPart MultipartFile csvFile) throws IOException, Exception{
         boolean succeeded = productService.loadBactchFromCSV(csvFile);
         if(succeeded){
             return new ResponseEntity<>("Batch cargado",HttpStatus.CREATED);
@@ -74,7 +73,7 @@ public class ProductController {
     }
 
     @PutMapping(value="/update", produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>updateProduct(@RequestPart ProductUpdateDTO productUpdateDTO){
+    public ResponseEntity<Product>updateProduct(@RequestPart ProductDTO productUpdateDTO){
         try {
             Product productUpdated = productService.updateProduct(productUpdateDTO);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
@@ -113,10 +112,20 @@ public class ProductController {
         }
     }
 
-    @PatchMapping(value="/updatePrice/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>updatePrice(@PathVariable("id") Integer id, @RequestParam float newPrice){
+    @PatchMapping(value="/updateUnitPrice/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Product>updatePrice(@PathVariable("id") Integer productCode, @RequestParam float newPrice){
         try {
-            Product productUpdated = productService.updatePrice(id, newPrice);
+            Product productUpdated = productService.updateUnitPrice(productCode, newPrice);
+            return new ResponseEntity<>(productUpdated,HttpStatus.OK);
+        } catch (EmptyResultDataAccessException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @PatchMapping(value="/updateDiscount/{id}",produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Product>updateDiscount(@PathVariable("id") Integer productCode, float newDiscount){
+        try {
+            Product productUpdated = productService.updateDiscount(productCode, newDiscount);
             return new ResponseEntity<>(productUpdated,HttpStatus.OK);
         } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
