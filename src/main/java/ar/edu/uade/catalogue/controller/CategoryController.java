@@ -36,7 +36,7 @@ public class CategoryController {
         }
     }
 
-    @GetMapping(value="/getProducts/{id}", produces={MediaType.APPLICATION_JSON_VALUE})
+   @GetMapping(value="/getProducts/{id}", produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<List<Product>>getProductsFromCategory(@PathVariable("id") Integer id){
         try {
             List<Product> productsFromCategory = categoryService.getAllProductsFromCategory(id);
@@ -55,17 +55,6 @@ public class CategoryController {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
-
-    @GetMapping(value="/getCategoryByName/{name}", produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Category>getCategoryByName(@PathVariable("name") String name){
-        try {
-            Category category = categoryService.getCategoryByName(name);
-            return new ResponseEntity<>(category, HttpStatus.OK);
-        } catch (EmptyResultDataAccessException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
 
     @PostMapping(value="/create", consumes={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Category>createCategory(@RequestBody Category category){

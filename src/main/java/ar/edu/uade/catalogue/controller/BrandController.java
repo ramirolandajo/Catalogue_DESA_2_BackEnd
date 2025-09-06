@@ -56,16 +56,6 @@ public class BrandController {
         }
     }
 
-    @GetMapping(value="/getBrandByName/{name}", produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Brand>getBrandByName(@PathVariable("name") String name){
-        try {
-            Brand brand = brandService.getBrandByName(name);
-            return  new ResponseEntity<>(brand, HttpStatus.OK);
-        } catch (EmptyResultDataAccessException e) {
-            return  new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
     @PostMapping(value="/create", consumes={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Brand>createBrand(@RequestBody Brand brand){
       Brand brandSaved = brandService.createBrand(brand);
