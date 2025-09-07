@@ -32,8 +32,8 @@ public class Category {
     @Column(name = "name")
     private String name;
     
-    @OneToMany(mappedBy="categories", cascade=CascadeType.ALL)
-    List<Product>products;
+    @Column(name = "products")
+    List<Integer>products;
 
     @Column(name="active", nullable=false)
     private boolean active;

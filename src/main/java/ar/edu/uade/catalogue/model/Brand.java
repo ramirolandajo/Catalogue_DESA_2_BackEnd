@@ -32,8 +32,8 @@ public class Brand {
     @Column(name = "name")
     private String name;
 
-    @OneToMany(mappedBy="brand", cascade=CascadeType.ALL)
-    private List<Product>products;
+    @Column(name = "products")
+    private List<Integer>products;
 
     @Column(name="active", nullable=false)
     private Boolean active;
