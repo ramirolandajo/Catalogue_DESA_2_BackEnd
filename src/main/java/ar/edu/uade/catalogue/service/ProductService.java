@@ -68,13 +68,15 @@ public class ProductService {
         productToSave.setHero(productDTO.isHero());
         productToSave.setActive(productDTO.isActive());
 
+        productRepository.save(productToSave);
+
         // Agregamos el producto a las categorias a las que pertenece
-        categoryService.addProductToCategorys(productToSave, productDTO.getCategories());
+        categoryService.addProductToCategorys(productDTO.getProductCode(), productDTO.getCategories());
 
         // Agregamos el producto a la marca a la que pertenece
-        brandService.addProductToBrand(productToSave, productDTO.getBrand());
+        brandService.addProductToBrand(productDTO.getProductCode(), productDTO.getBrand());
 
-        return productRepository.save(productToSave);
+        return productToSave;
     }
 
     public boolean loadBactchFromCSV(MultipartFile csvFile) throws  Exception{
@@ -122,7 +124,6 @@ public class ProductService {
                     Integer productCode = Integer.valueOf(data[0].trim());
                     String name = data[1].trim();
                     String description = data[2].trim();
-                    Float price = Float.valueOf(data[3].trim());
                     Float unitPrice = Float.valueOf(data[4].trim());
                     Float discount = Float.valueOf(data[5].trim());
                     int stock = Integer.parseInt(data[6].trim());
@@ -138,7 +139,6 @@ public class ProductService {
                     pDTO.setProductCode(productCode);
                     pDTO.setName(name);
                     pDTO.setDescription(description);
-                    pDTO.setPrice(price);
                     pDTO.setUnitPrice(unitPrice);
                     pDTO.setDiscount(discount);
                     pDTO.setStock(stock);
@@ -180,7 +180,6 @@ public class ProductService {
 
         productToUpdate.setName(productUpdateDTO.getName());
         productToUpdate.setDescription(productUpdateDTO.getDescription());
-        productToUpdate.setPrice(productUpdateDTO.getPrice());
         productToUpdate.setUnitPrice(productUpdateDTO.getUnitPrice());
         productToUpdate.setDiscount(productUpdateDTO.getDiscount());
         productToUpdate.setStock(productUpdateDTO.getStock());

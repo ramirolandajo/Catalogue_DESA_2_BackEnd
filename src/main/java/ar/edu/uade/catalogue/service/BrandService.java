@@ -9,8 +9,8 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Brand;
-import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.repository.BrandRepository;
 
 @Service
@@ -18,6 +18,9 @@ public class BrandService {
 
     @Autowired
     BrandRepository brandRepository;
+
+    @Autowired
+    ProductService productService;
 
     public List<Brand>getBrands(){
         return brandRepository.findAll().stream().toList();
@@ -27,7 +30,15 @@ public class BrandService {
         Optional<Brand> brandOptional = brandRepository.findById(id);
         Brand brand = brandOptional.get();
 
-        return brand.getProducts();
+        List<Integer>products = brand.getProducts();
+        
+        List<Product>productsFound = new ArrayList<>();
+
+        for (Integer productCode : products) {
+            productsFound.add(productService.getProductByProductCode(productCode));
+        }
+
+        return productsFound;
     }
 
     public Brand getBrandByID(Integer id){
@@ -35,12 +46,12 @@ public class BrandService {
         return brandOptional.orElse(null);
     }
 
-    public void addProductToBrand(Product product, Integer id){
+    public void addProductToBrand(Integer productCode, Integer id){
         Optional<Brand> brandOptional = brandRepository.findById(id);
         Brand brandToUpdate = brandOptional.get();
 
-        List<Product>productsFromBrand = brandToUpdate.getProducts();
-        productsFromBrand.add(product);
+        List<Integer>productsFromBrand = brandToUpdate.getProducts();
+        productsFromBrand.add(productCode);
 
         brandToUpdate.setProducts(productsFromBrand);
 

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.DTO.CategoryDTO;
 import ar.edu.uade.catalogue.repository.CategoryRepository;
 
 @Service
@@ -17,6 +18,9 @@ public class CategoryService {
     
     @Autowired
     CategoryRepository categoryRepository;
+
+    @Autowired
+    ProductService productService;
 
     public List<Category>getCategories(){
         List<Category> categories = categoryRepository.findAll();
@@ -26,8 +30,16 @@ public class CategoryService {
     public List<Product> getAllProductsFromCategory(Integer id){
         Optional<Category> categoryOptional = categoryRepository.findById(id);
         Category category = categoryOptional.get();
-        
-        return category.getProducts();
+
+        List<Integer> productsToFind = category.getProducts();
+
+        List<Product>productsFound = new ArrayList<>();
+
+        for (Integer productCode : productsToFind) {
+            productsFound.add(productService.getProductByProductCode(productCode));
+        }
+
+        return productsFound;
     }
 
     public Category getCategoryByID(Integer id){
@@ -45,19 +57,24 @@ public class CategoryService {
         return categoriesFounded;
     }
     
-    public Category createCategory(Category category){
-        // Asumimos sin dto xq es chico el objeto 
-        return categoryRepository.save(category);
+    public Category createCategory(CategoryDTO categoryDTO){
+        Category categoryToSave = new Category();
+
+        categoryToSave.setName(categoryDTO.getName());
+        categoryToSave.setProducts(new ArrayList<Integer>());
+        categoryToSave.setActive(categoryDTO.isActive());
+
+        return categoryRepository.save(categoryToSave);
     }
 
-    public void addProductToCategorys(Product product, List<Integer>categories){
+    public void addProductToCategorys(Integer productCode, List<Integer>categories){
         // Cambiar a boolean el return para validar cuando se asigna en Product?
         for(Integer id : categories){
             Optional<Category> categoryOptinal = categoryRepository.findById(id);
             Category c = categoryOptinal.get();
             
-            List<Product> prodcutsFromCategory = c.getProducts();
-            prodcutsFromCategory.add(product);
+            List<Integer> prodcutsFromCategory = c.getProducts();
+            prodcutsFromCategory.add(productCode);
             
             categoryRepository.save(c);
         }
