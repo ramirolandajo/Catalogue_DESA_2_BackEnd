@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -74,7 +73,7 @@ public class ProductController {
     }
 
     @PutMapping(value="/update", produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>updateProduct(@RequestPart ProductDTO productUpdateDTO){
+    public ResponseEntity<Product>updateProduct(@RequestBody ProductDTO productUpdateDTO){
         try {
             Product productUpdated = productService.updateProduct(productUpdateDTO);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
