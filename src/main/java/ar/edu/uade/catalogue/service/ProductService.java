@@ -1,8 +1,5 @@
 package ar.edu.uade.catalogue.service;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -64,7 +61,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImage(productDTO.getImages());
+        productToSave.setImages(productDTO.getImages());
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -152,7 +149,7 @@ public class ProductService {
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
-        productToUpdate.setImage(productUpdateDTO.getImages());
+        productToUpdate.setImages(productUpdateDTO.getImages());
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());

@@ -70,7 +70,7 @@ public class Product {
     private Brand brand;
    
     @Column(name = "images")
-    private List<String> image; //Solo links a las imgs
+    private List<String> images; //Solo links a las img
 
     @Column(name="isNew")
     private boolean isNew;
