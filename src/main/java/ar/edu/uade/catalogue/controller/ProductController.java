@@ -63,9 +63,9 @@ public class ProductController {
         }
     }
 
-    @PostMapping(value="/upload")
-    public ResponseEntity<?>loadBatch(@RequestPart MultipartFile csvFile) throws IOException, Exception{
-        boolean succeeded = productService.loadBactchFromCSV(csvFile);
+    @PostMapping(value="/upload",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?>loadBatch(@RequestParam("file") MultipartFile csvFile) throws IOException, Exception{
+        boolean succeeded = productService.loadBatchFromCSV(csvFile);
         if(succeeded){
             return new ResponseEntity<>("Batch cargado",HttpStatus.CREATED);
         }else{

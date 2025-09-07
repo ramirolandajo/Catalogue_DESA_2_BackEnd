@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -13,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.opencsv.CSVReader;
 
 import ar.edu.uade.catalogue.model.Brand;
 import ar.edu.uade.catalogue.model.Category;
@@ -79,97 +82,60 @@ public class ProductService {
         return productToSave;
     }
 
-    public boolean loadBactchFromCSV(MultipartFile csvFile) throws  Exception{
-       List<ProductDTO> products = new ArrayList<>();
-       File log = new File("log.txt");
-       FileWriter logWriter = new FileWriter(log);
+    public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
+        List<ProductDTO> items = new ArrayList<>();
 
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(csvFile.getInputStream()))) {
-            String line;
-            int lineNumber = 0;
+        try (CSVReader r = new CSVReader(new InputStreamReader(csvFile.getInputStream(), StandardCharsets.UTF_8))) {
+            String[] row;
+            int line = 0;
 
-            while ((line = br.readLine()) != null) {
-                lineNumber++;
-
-                
-                if (line.trim().isEmpty()) {
-                    logWriter.write("\nLinea " + lineNumber + " vacia");
-                    continue; //Ignora linea vacia
-                }
-
-                String[] data = line.split(",");
-
-                
-                if (data.length < 15) {
-                    //Chequea que tenga el formato y si no loguea
-                    logWriter.write(" \nCampos vacios en fila " + lineNumber + ": " + line);
-                    continue;
-                }
+            while ((row = r.readNext()) != null) {
+                line++;
+                // Saltar cabecera
+                if (line == 1 && String.join(",", row).toLowerCase().contains("productcode")) continue;
+                if (row.length < 15) continue; // formato inválido
 
                 try {
-                    //Manejando lista de categorias e imagenes para setear
-                    String categoryString = data[7].trim();
-                    List<Integer> categories = Arrays.stream(categoryString.split(";"))
-                                                .map(String::trim)
-                                                .filter(s -> !s.isEmpty())
-                                                .map(Integer::parseInt)
-                                                .toList();
-                    
-                    String imageString = data[10].trim();
-                    List<String> images = Arrays.stream(imageString.split(";"))
-                                            .map(String::trim)
-                                            .filter(s-> !s.isEmpty())
-                                            .toList();
-                    
-                    Integer productCode = Integer.valueOf(data[0].trim());
-                    String name = data[1].trim();
-                    String description = data[2].trim();
-                    Float unitPrice = Float.valueOf(data[4].trim());
-                    Float discount = Float.valueOf(data[5].trim());
-                    int stock = Integer.parseInt(data[6].trim());
-                    int brandID = Integer.parseInt(data[8].trim());
-                    Float calification = Float.valueOf(data[9].trim());
-                    boolean isNew = Boolean.parseBoolean(data[11].trim());
-                    boolean isBestSeller = Boolean.parseBoolean(data[12].trim());
-                    boolean isFeatured = Boolean.parseBoolean(data[13].trim());
-                    boolean hero = Boolean.parseBoolean(data[14].trim());
-                    boolean active = Boolean.parseBoolean(data[15].trim());
-                
-                    ProductDTO pDTO = new ProductDTO();
-                    pDTO.setProductCode(productCode);
-                    pDTO.setName(name);
-                    pDTO.setDescription(description);
-                    pDTO.setUnitPrice(unitPrice);
-                    pDTO.setDiscount(discount);
-                    pDTO.setStock(stock);
-                    pDTO.setCategories(categories);
-                    pDTO.setBrand(brandID);
-                    pDTO.setCalification(calification);
-                    pDTO.setImages(images);
-                    pDTO.setNew(isNew);
-                    pDTO.setBestSeller(isBestSeller);
-                    pDTO.setFeatured(isFeatured);
-                    pDTO.setHero(hero);
-                    pDTO.setActive(active);
-                    
-                    products.add(pDTO);
-                } catch (NumberFormatException e) {
-                    logWriter.write(" \nError al parsear número en fila " + lineNumber + ": " + line);
+                    ProductDTO dto = new ProductDTO();
+                    dto.setProductCode(Integer.parseInt(row[0].trim()));
+                    dto.setName(row[1].trim());
+                    dto.setDescription(row[2].trim());
+                    dto.setUnitPrice(Float.parseFloat(row[3].trim()));
+                    dto.setDiscount(Float.parseFloat(row[4].trim()));
+                    dto.setStock(Integer.parseInt(row[5].trim()));
+
+                    dto.setCategories(Arrays.stream(row[6].split(";"))
+                            .filter(s -> !s.isBlank())
+                            .map(Integer::parseInt)
+                            .toList());
+
+                    dto.setBrand(Integer.parseInt(row[7].trim()));
+                    dto.setCalification(Float.parseFloat(row[8].trim()));
+
+                    dto.setImages(Arrays.stream(row[9].split(";"))
+                            .filter(s -> !s.isBlank())
+                            .toList());
+
+                    dto.setNew(Boolean.parseBoolean(row[10].trim()));
+                    dto.setBestSeller(Boolean.parseBoolean(row[11].trim()));
+                    dto.setFeatured(Boolean.parseBoolean(row[12].trim()));
+                    dto.setHero(Boolean.parseBoolean(row[13].trim()));
+                    dto.setActive(Boolean.parseBoolean(row[14].trim()));
+
+                    items.add(dto);
+                } catch (Exception e) {
+                    // si falla una fila, la salteamos
+                    System.out.println("Error en línea " + line + ": " + Arrays.toString(row));
                 }
             }
         }
 
-        logWriter.close();
-
-        if (!products.isEmpty()) {
-            for (ProductDTO p : products) {
-                createProduct(p);
-            }
-            return true;
-        } else {
-            return false;
+        for (ProductDTO p : items) {
+            createProduct(p);
         }
-    } 
+        return !items.isEmpty();
+    }
+
 
     public Product updateProduct(ProductDTO productUpdateDTO){
         List<Category>categoriesToUpdate = categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
