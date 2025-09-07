@@ -16,7 +16,6 @@ public class ProductDTO {
     private Integer productCode;
     private String name;
     private String description;
-    private float price;
     private float unitPrice;
     private float discount;
     private int stock;
