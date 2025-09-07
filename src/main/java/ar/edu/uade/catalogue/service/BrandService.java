@@ -12,6 +12,7 @@ import ar.edu.uade.catalogue.model.Brand;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.repository.BrandRepository;
+import ar.edu.uade.catalogue.repository.ProductRepository;
 
 @Service
 public class BrandService {
@@ -20,7 +21,7 @@ public class BrandService {
     BrandRepository brandRepository;
 
     @Autowired
-    ProductService productService;
+    ProductRepository productRepository;
 
     public List<Brand>getBrands(){
         return brandRepository.findAll().stream().toList();
@@ -35,7 +36,7 @@ public class BrandService {
         List<Product>productsFound = new ArrayList<>();
 
         for (Integer productCode : products) {
-            productsFound.add(productService.getProductByProductCode(productCode));
+            productsFound.add(productRepository.findByProductCode(productCode).get());
         }
 
         return productsFound;

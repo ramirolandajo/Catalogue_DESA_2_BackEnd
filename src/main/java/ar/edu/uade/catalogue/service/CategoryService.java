@@ -12,6 +12,7 @@ import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.CategoryDTO;
 import ar.edu.uade.catalogue.repository.CategoryRepository;
+import ar.edu.uade.catalogue.repository.ProductRepository;
 
 @Service
 public class CategoryService {
@@ -20,7 +21,7 @@ public class CategoryService {
     CategoryRepository categoryRepository;
 
     @Autowired
-    ProductService productService;
+    ProductRepository productRepository;
 
     public List<Category>getCategories(){
         List<Category> categories = categoryRepository.findAll();
@@ -36,7 +37,7 @@ public class CategoryService {
         List<Product>productsFound = new ArrayList<>();
 
         for (Integer productCode : productsToFind) {
-            productsFound.add(productService.getProductByProductCode(productCode));
+            productsFound.add(productRepository.findByProductCode(productCode).get());
         }
 
         return productsFound;
