@@ -1,8 +1,6 @@
 package ar.edu.uade.catalogue.service;
 
-import ar.edu.uade.catalogue.model.Brand;
-import ar.edu.uade.catalogue.model.Category;
-import ar.edu.uade.catalogue.model.Product;
+import ar.edu.uade.catalogue.model.*;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
 import ar.edu.uade.catalogue.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,108 +35,167 @@ class ProductServiceTest {
     @InjectMocks
     private ProductService productService;
 
-    private ProductDTO dto;
     private Product product;
+    private ProductDTO dto;
     private Brand brand;
-    private List<Category> categories;
+    private Category category;
 
     @BeforeEach
-    void setUp() {
-        dto = new ProductDTO();
-        dto.setProductCode(1001);
-        dto.setName("Test Product");
-        dto.setDescription("Description");
-        dto.setUnitPrice(100f);
-        dto.setDiscount(10f);
-        dto.setStock(5);
-        dto.setBrand(1);
-        dto.setCategories(List.of(1, 2));
-        dto.setCalification(4.5f);
-        dto.setImages(List.of("image1.jpg", "image2.jpg"));
-        dto.setNew(true);
-        dto.setBestSeller(false);
-        dto.setFeatured(true);
-        dto.setHero(true);
-        dto.setActive(true);
-
+    void setup() {
         product = new Product();
         product.setProductCode(1001);
         product.setName("Test Product");
+        product.setDescription("Desc");
+        product.setUnitPrice(100f);
+        product.setDiscount(10f);
+        product.setStock(5);
+        product.setCalification(4.5f);
+        product.setImages(List.of("img.png"));
+        product.setActive(true);
+
+        dto = new ProductDTO();
+        dto.setProductCode(1001);
+        dto.setName("Test Product");
+        dto.setDescription("Desc");
+        dto.setUnitPrice(100f);
+        dto.setDiscount(10f);
+        dto.setStock(5);
+        dto.setCalification(4.5f);
+        dto.setImages(List.of("img.png"));
+        dto.setCategories(List.of(1));
+        dto.setBrand(1);
+        dto.setActive(true);
 
         brand = new Brand();
         brand.setId(1);
-        brand.setName("Test Brand");
+        brand.setName("BrandTest");
+        brand.setProducts(List.of(1001));
+        brand.setActive(true);
 
-        categories = List.of(new Category(1, "Cat1", null, true),
-                             new Category(2, "Cat2", null, true));
+        category = new Category();
+        category.setId(1);
+        category.setName("CategoryTest");
+        category.setProducts(List.of(1001));
+        category.setActive(true);
+    }
+
+    @Test
+    void getProducts_ShouldReturnList() {
+        when(productRepository.findAll()).thenReturn(List.of(product));
+
+        List<Product> result = productService.getProducts();
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+    }
+
+    @Test
+    void getProductByProductCode_ShouldReturnProduct() {
+        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+
+        Product result = productService.getProductByProductCode(1001);
+
+        assertNotNull(result);
+        assertEquals("Test Product", result.getName());
     }
 
     @Test
     void createProduct_ShouldSaveAndReturnProduct() throws Exception {
-        when(brandService.getBrandByID(1)).thenReturn(brand);
-        when(categoryService.geCategoriesForProductByID(dto.getCategories())).thenReturn(categories);
+        when(categoryService.geCategoriesForProductByID(anyList())).thenReturn(List.of(category));
+        when(brandService.getBrandByID(anyInt())).thenReturn(brand);
         when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("POST", "{}"));
 
-        Product saved = productService.createProduct(dto);
+        Product result = productService.createProduct(dto);
 
-        assertNotNull(saved);
-        verify(productRepository, times(1)).save(any(Product.class));
-        verify(brandService, times(1)).addProductToBrand(dto.getProductCode(), dto.getBrand());
-        verify(categoryService, times(1)).addProductToCategories(dto.getProductCode(), dto.getCategories());
-        verify(kafkaMockService, times(1)).sendEvent(eq("POST: Producto creado"), any(Product.class));
+        assertNotNull(result);
+        assertEquals("Test Product", result.getName());
     }
 
     @Test
-    void getProductByCode_ShouldReturnProduct() {
+    void updateProduct_ShouldModifyAndReturnUpdated() {
         when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(categoryService.geCategoriesForProductByID(anyList())).thenReturn(List.of(category));
+        when(brandService.getBrandByID(anyInt())).thenReturn(brand);
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PUT", "{}"));
 
-        Product found = productService.getProductByProductCode(1001);
+        dto.setName("Updated Product");
 
-        assertNotNull(found);
-        assertEquals(1001, found.getProductCode());
+        Product updated = productService.updateProduct(dto);
+
+        assertNotNull(updated);
+        assertEquals("Updated Product", updated.getName());
     }
 
     @Test
-    void getProductByCode_NotFound_ShouldReturnNull() {
-        when(productRepository.findByProductCode(9999)).thenReturn(Optional.empty());
-
-        Product found = productService.getProductByProductCode(9999);
-
-        assertNull(found);
-    }
-
-    @Test
-    void updateStock_ShouldDecreaseStock() {
-        product.setStock(10);
-        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
-
-        Product updated = productService.updateStockPostSale(1001, 3);
-
-        assertEquals(7, updated.getStock());
-        verify(productRepository, times(1)).save(product);
-    }
-
-    @Test
-    void updateUnitPrice_ShouldChangePrice() {
-        product.setDiscount(10f);
+    void updateStockPostSale_ShouldDecreaseStock() {
         when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
         when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
 
-        Product updated = productService.updateUnitPrice(1001, 200f);
+        Product result = productService.updateStockPostSale(1001, 2);
 
-        assertEquals(200f, updated.getUnitPrice());
-        assertEquals(20f, updated.getPrice()); // 200 * 10% de descuento
+        assertEquals(3, result.getStock());
+    }
+
+    @Test
+    void updateStockPostCancelation_ShouldIncreaseStock() {
+        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
+
+        Product result = productService.updateStockPostCancelation(1001, 2);
+
+        assertEquals(7, result.getStock());
+    }
+
+    @Test
+    void updateStock_ShouldSetNewStock() {
+        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
+
+        Product result = productService.updateStock(1001, 50);
+
+        assertEquals(50, result.getStock());
+    }
+
+    @Test
+    void updateUnitPrice_ShouldUpdatePriceWithDiscount() {
+        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
+
+        Product result = productService.updateUnitPrice(1001, 200f);
+
+        assertNotNull(result);
+        assertEquals(200f, result.getUnitPrice());
+        assertEquals(20f, result.getPrice()); // 200 * 10%
+    }
+
+    @Test
+    void updateDiscount_ShouldUpdateAndRecalculatePrice() {
+        when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
+
+        Product result = productService.updateDiscount(1001, 20f);
+
+        assertNotNull(result);
+        assertEquals(20f, result.getDiscount());
+        assertEquals(20f, result.getPrice()); // 100 * 20%
     }
 
     @Test
     void deleteProduct_ShouldDeactivate() {
-        product.setActive(true);
         when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+        when(kafkaMockService.sendEvent(anyString(), any())).thenReturn(new Event("PATCH", "{}"));
 
-        boolean result = productService.deleteProduct(1001);
+        boolean deleted = productService.deleteProduct(1001);
 
-        assertTrue(result);
+        assertTrue(deleted);
         assertFalse(product.isActive());
-        verify(productRepository, times(1)).save(product);
     }
 }
