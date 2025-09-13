@@ -9,6 +9,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Category;
+import ar.edu.uade.catalogue.model.Event;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.CategoryDTO;
 import ar.edu.uade.catalogue.repository.CategoryRepository;
@@ -22,6 +23,9 @@ public class CategoryService {
 
     @Autowired
     ProductRepository productRepository;
+
+    @Autowired 
+    KafkaMockService kafkaMockService;
 
     public List<Category>getCategories(){
         List<Category> categories = categoryRepository.findAll();
@@ -65,10 +69,13 @@ public class CategoryService {
         categoryToSave.setProducts(new ArrayList<Integer>());
         categoryToSave.setActive(categoryDTO.isActive());
 
+        Event eventSent = kafkaMockService.sendEvent("POST: Cateogria creada", categoryToSave);
+        System.out.println(eventSent.toString());
+
         return categoryRepository.save(categoryToSave);
     }
 
-    public void addProductToCategorys(Integer productCode, List<Integer>categories){
+    public void addProductToCategories(Integer productCode, List<Integer>categories){
         // Cambiar a boolean el return para validar cuando se asigna en Product?
         for(Integer id : categories){
             Optional<Category> categoryOptinal = categoryRepository.findById(id);
@@ -77,6 +84,12 @@ public class CategoryService {
             List<Integer> prodcutsFromCategory = c.getProducts();
             prodcutsFromCategory.add(productCode);
             
+            Event eventSent = kafkaMockService.sendEvent
+            ("PATCH: producto " + String.valueOf(productCode)
+             + " agregado a las categorias: + " + categories.toString() , categories);
+
+            System.out.println(eventSent.toString());
+
             categoryRepository.save(c);
         }
         
@@ -89,6 +102,9 @@ public class CategoryService {
 
             categoryToDeactivate.setActive(false);
             categoryRepository.save(categoryToDeactivate);
+
+            Event eventSent = kafkaMockService.sendEvent("PATCH: Categoria desactivada", categoryToDeactivate);
+            System.out.println(eventSent.toString());
 
             return true;
         }catch(EmptyResultDataAccessException e){

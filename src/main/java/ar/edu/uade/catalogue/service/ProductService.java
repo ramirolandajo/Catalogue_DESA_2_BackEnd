@@ -16,6 +16,7 @@ import com.opencsv.CSVReader;
 
 import ar.edu.uade.catalogue.model.Brand;
 import ar.edu.uade.catalogue.model.Category;
+import ar.edu.uade.catalogue.model.Event;
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.repository.ProductRepository;
@@ -31,6 +32,9 @@ public class ProductService {
 
     @Autowired
     CategoryService categoryService;
+
+    @Autowired
+    KafkaMockService kafkaMockService;
 
     public List<Product>getProducts(){
         return productRepository.findAll();
@@ -71,10 +75,13 @@ public class ProductService {
         productRepository.save(productToSave);
 
         // Agregamos el producto a las categorias a las que pertenece
-        categoryService.addProductToCategorys(productDTO.getProductCode(), productDTO.getCategories());
+        categoryService.addProductToCategories(productDTO.getProductCode(), productDTO.getCategories());
 
         // Agregamos el producto a la marca a la que pertenece
         brandService.addProductToBrand(productDTO.getProductCode(), productDTO.getBrand());
+
+        Event eventSent = kafkaMockService.sendEvent("POST: Producto creado", productToSave);
+        System.out.println(eventSent.toString());
 
         return productToSave;
     }
@@ -126,7 +133,7 @@ public class ProductService {
                 }
             }
         }
-
+        // Aca los Event que manda al core salen desde el createProduct()
         for (ProductDTO p : items) {
             createProduct(p);
         }
@@ -156,6 +163,9 @@ public class ProductService {
         productToUpdate.setHero(productUpdateDTO.isHero());
         productToUpdate.setActive(productUpdateDTO.isActive());
         
+        Event eventSent = kafkaMockService.sendEvent("PUT: Producto Actualizado", productToUpdate);
+        System.out.println(eventSent.toString());
+
         return productRepository.save(productToUpdate);
     }
 
@@ -167,6 +177,9 @@ public class ProductService {
         productToUpdate.setStock(newStock);
 
         productRepository.save(productToUpdate);
+
+        Event eventSent = kafkaMockService.sendEvent("PATCH: Stock disminuido por venta", productToUpdate);
+        System.out.println(eventSent.toString());
 
         return productToUpdate;
     }
@@ -181,6 +194,9 @@ public class ProductService {
 
         productRepository.save(productToUpdate);
 
+        Event eventSent = kafkaMockService.sendEvent("PATCH: Stock aumentado por cancelacion", productToUpdate);
+        System.out.println(eventSent.toString());
+
         return  productToUpdate;
     }
     public Product updateStock (Integer productCode, int newStock){
@@ -190,6 +206,9 @@ public class ProductService {
         productToUpdate.setStock(newStock);
 
         productRepository.save(productToUpdate);
+
+        Event eventSent = kafkaMockService.sendEvent("PATCH: Stock actualizado", productToUpdate);
+        System.out.println(eventSent.toString());
         
         return productToUpdate;
     }
@@ -204,6 +223,9 @@ public class ProductService {
 
         productToUpdate.setPrice(priceWithDiscount);
 
+        Event eventSent = kafkaMockService.sendEvent("PATCH: Precio unitario actualizado", productToUpdate);
+        System.out.println(eventSent.toString());
+
         return productRepository.save(productToUpdate);
     }
     
@@ -217,6 +239,9 @@ public class ProductService {
 
         productToUpdate.setPrice(newPriceWithDiscount);
 
+        Event eventSent = kafkaMockService.sendEvent("PATCH: Descuento actualizado", productToUpdate);
+        System.out.println(eventSent.toString());
+
        return productRepository.save(productToUpdate);
     }
 
@@ -228,6 +253,9 @@ public class ProductService {
             productToDiactivate.setActive(false);
             productRepository.save(productToDiactivate);
 
+            Event eventSent = kafkaMockService.sendEvent("PATCH: Producto desactivado", productToDiactivate);
+            System.out.println(eventSent.toString());
+            
             return true;
         }catch(EmptyResultDataAccessException e){
             return false;

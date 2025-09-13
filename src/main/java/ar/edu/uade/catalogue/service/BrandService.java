@@ -9,6 +9,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
 
 import ar.edu.uade.catalogue.model.Brand;
+import ar.edu.uade.catalogue.model.Event;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.repository.BrandRepository;
@@ -22,6 +23,9 @@ public class BrandService {
 
     @Autowired
     ProductRepository productRepository;
+
+    @Autowired
+    KafkaMockService kafkaMockService;
 
     public List<Brand>getBrands(){
         return brandRepository.findAll().stream().toList();
@@ -55,6 +59,11 @@ public class BrandService {
         productsFromBrand.add(productCode);
 
         brandToUpdate.setProducts(productsFromBrand);
+        Event eventSent = kafkaMockService.sendEvent
+            ("PATCH: producto " + String.valueOf(productCode)
+             + " agregado a la marca: + " + String.valueOf(id) , brandToUpdate);
+
+            System.out.println(eventSent.toString());
 
         brandRepository.save(brandToUpdate);        
     }
@@ -66,6 +75,9 @@ public class BrandService {
         brandToSave.setProducts(new ArrayList<>());
         brandToSave.setActive(brandDTO.isActive());
         
+        Event eventSent = kafkaMockService.sendEvent("POST: Marca creada", brandToSave);
+        System.out.println(eventSent.toString());
+
         return brandRepository.save(brandToSave);
     }
 
@@ -78,6 +90,9 @@ public class BrandService {
             brandToDeactivate.setActive(false);
             brandRepository.save(brandToDeactivate);
 
+            Event eventSent = kafkaMockService.sendEvent("PATCH: Marca desactivada", brandToDeactivate);
+            System.out.println(eventSent.toString());
+            
             return true; 
         }catch(EmptyResultDataAccessException e){
             return false;
