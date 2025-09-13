@@ -36,5 +36,5 @@ public class Brand {
     private List<Integer>products;
 
     @Column(name="active", nullable=false)
-    private Boolean active;
+    private boolean active;
 }

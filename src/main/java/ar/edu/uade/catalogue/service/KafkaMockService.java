@@ -1,5 +1,7 @@
 package ar.edu.uade.catalogue.service;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -30,5 +32,9 @@ public class KafkaMockService {
         } catch (Exception e) {
             throw new RuntimeException("Error serializando payload", e);
         }
+    }
+
+    public List<Event>getAll(){
+        return eventRepository.findAll();
     }
 }
