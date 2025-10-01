@@ -4,6 +4,8 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -69,7 +71,9 @@ public class Product {
     @JoinColumn(name = "brand_id")
     private Brand brand;
    
-    @Column(name = "images")
+    @ElementCollection
+    @CollectionTable(name = "product_images", joinColumns = @JoinColumn(name = "product_id"))
+    @Column(name = "image_url")
     private List<String> images; //Solo links a las img
 
     @Column(name="isNew")
@@ -86,6 +90,11 @@ public class Product {
 
     @Column(name="active")
     private boolean active;
+
+    @ElementCollection
+    @CollectionTable(name = "product_reviews", joinColumns = @JoinColumn(name = "product_id"))
+    @Column(name = "review_text")
+    private List<String> reviews; // mensajes de reviews
 
 @Override
 public String toString(){

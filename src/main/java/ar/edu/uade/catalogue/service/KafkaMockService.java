@@ -17,17 +17,18 @@ public class KafkaMockService {
     @Autowired 
     EventRepository eventRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired
+    private ObjectMapper objectMapper; // usar el mapper de Spring (con JavaTimeModule)
 
     public Event sendEvent(String type, Object payload) {
         try {
-            // si falla, lo guarda con toString()
             String payloadJson;
             try {
                 payloadJson = objectMapper.writeValueAsString(payload);
             } catch (JsonProcessingException e) {
-                payloadJson = payload.toString();
+                payloadJson = String.valueOf(payload);
             }
+            // Solo persistimos en la tabla event; la emisión HTTP se maneja en InventoryEventPublisher/CoreApiClient
             return eventRepository.save(new Event(type, payloadJson));
         } catch (Exception e) {
             throw new RuntimeException("Error serializando payload", e);

@@ -29,6 +29,9 @@ public class Brand {
     @Column(name = "brand_id")
     private Integer id;
 
+    @Column(name = "brand_code", unique = true, nullable = true)
+    private Integer brandCode; // identificador unificado
+
     @Column(name = "name")
     private String name;
 

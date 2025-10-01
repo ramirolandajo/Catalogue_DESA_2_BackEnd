@@ -14,6 +14,7 @@ import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.CategoryDTO;
 import ar.edu.uade.catalogue.repository.CategoryRepository;
 import ar.edu.uade.catalogue.repository.ProductRepository;
+import ar.edu.uade.catalogue.messaging.InventoryEventPublisher;
 
 @Service
 public class CategoryService {
@@ -26,6 +27,9 @@ public class CategoryService {
 
     @Autowired 
     KafkaMockService kafkaMockService;
+
+    @Autowired
+    InventoryEventPublisher inventoryEventPublisher;
 
     public List<Category>getCategories(){
         List<Category> categories = categoryRepository.findAll();
@@ -41,7 +45,7 @@ public class CategoryService {
         List<Product>productsFound = new ArrayList<>();
 
         for (Integer productCode : productsToFind) {
-            productsFound.add(productRepository.findByProductCode(productCode).get());
+            productRepository.findByProductCode(productCode).ifPresent(productsFound::add);
         }
 
         return productsFound;
@@ -52,47 +56,87 @@ public class CategoryService {
         return category.orElse(null);         
     }
 
-    public List<Category> geCategoriesForProductByID(List<Integer>categories){
-        // No tiene endpoint porque es metodo interno que ayuda a la creacion del producto
-        List<Category> categoriesFounded = new ArrayList<>();
+    public Category getCategoryByCode(Integer code){
+        return categoryRepository.findByCategoryCode(code).orElse(null);
+    }
 
-        for (Integer id : categories) {
-            categoriesFounded.add(categoryRepository.findById(id).get());
+    public List<Category> geCategoriesForProductByID(List<Integer>categories){
+        // Compatibilidad: método antiguo por IDs internos
+        List<Category> categoriesFounded = new ArrayList<>();
+        if (categories == null) return categoriesFounded;
+        for ( Integer id : categories) {
+            categoryRepository.findById(id).ifPresent(categoriesFounded::add);
         }
         return categoriesFounded;
     }
-    
-    public Category createCategory(CategoryDTO categoryDTO){
-        Category categoryToSave = new Category();
 
+    public List<Category> geCategoriesForProductByCodes(List<Integer> codes) {
+        List<Category> out = new ArrayList<>();
+        if (codes == null) return out;
+        for (Integer code : codes) {
+            categoryRepository.findByCategoryCode(code).ifPresent(out::add);
+        }
+        return out;
+    }
+
+    public Category createCategory(CategoryDTO categoryDTO){
+        if (categoryDTO.getCategoryCode() == null) {
+            throw new IllegalArgumentException("categoryCode es requerido para crear categoría");
+        }
+        if (categoryRepository.existsByCategoryCode(categoryDTO.getCategoryCode())) {
+            throw new IllegalArgumentException("categoryCode ya existe: " + categoryDTO.getCategoryCode());
+        }
+
+        Category categoryToSave = new Category();
+        categoryToSave.setCategoryCode(categoryDTO.getCategoryCode());
         categoryToSave.setName(categoryDTO.getName());
         categoryToSave.setProducts(new ArrayList<Integer>());
         categoryToSave.setActive(categoryDTO.isActive());
 
-        Event eventSent = kafkaMockService.sendEvent("POST: Cateogria creada", categoryToSave);
+        Event eventSent = kafkaMockService.sendEvent("POST: Categoría creada", categoryToSave);
         System.out.println(eventSent.toString());
 
-        return categoryRepository.save(categoryToSave);
+        Category saved = categoryRepository.save(categoryToSave);
+        // Emisión hacia middleware
+        inventoryEventPublisher.emitCategoriaCreada(saved);
+        return saved;
     }
 
     public void addProductToCategories(Integer productCode, List<Integer>categories){
-        // Cambiar a boolean el return para validar cuando se asigna en Product?
+        // Método legacy por IDs internos
+        if (categories == null) return;
         for(Integer id : categories){
             Optional<Category> categoryOptinal = categoryRepository.findById(id);
+            if (categoryOptinal.isEmpty()) continue;
             Category c = categoryOptinal.get();
-            
             List<Integer> prodcutsFromCategory = c.getProducts();
-            prodcutsFromCategory.add(productCode);
-            
+            if (prodcutsFromCategory == null) {
+                prodcutsFromCategory = new ArrayList<>();
+                c.setProducts(prodcutsFromCategory);
+            }
+            if (!prodcutsFromCategory.contains(productCode)) {
+                prodcutsFromCategory.add(productCode);
+            }
             Event eventSent = kafkaMockService.sendEvent
-            ("PATCH: producto " + String.valueOf(productCode)
-             + " agregado a las categorias: + " + categories.toString() , categories);
-
+            ("PATCH: producto " + productCode +
+             " agregado a las categorias: + " + categories.toString() , categories);
             System.out.println(eventSent.toString());
-
             categoryRepository.save(c);
         }
-        
+
+    }
+
+    public void addProductToCategoriesByCodes(Integer productCode, List<Integer> codes){
+        if (codes == null) return;
+        for (Integer code : codes) {
+            Optional<Category> catOpt = categoryRepository.findByCategoryCode(code);
+            if (catOpt.isEmpty()) continue;
+            Category c = catOpt.get();
+            List<Integer> list = c.getProducts();
+            if (list == null) { list = new ArrayList<>(); c.setProducts(list);}
+            if (!list.contains(productCode)) list.add(productCode);
+            categoryRepository.save(c);
+        }
     }
 
     public boolean deleteCategory(Integer id){
@@ -105,7 +149,27 @@ public class CategoryService {
 
             Event eventSent = kafkaMockService.sendEvent("PATCH: Categoria desactivada", categoryToDeactivate);
             System.out.println(eventSent.toString());
+            // Emisión hacia middleware
+            inventoryEventPublisher.emitCategoriaDesactivada(categoryToDeactivate);
 
+            return true;
+        }catch(EmptyResultDataAccessException e){
+            return false;
+        }
+    }
+
+    // Nuevo: baja lógica por category_code
+    public boolean deleteCategoryByCode(Integer categoryCode){
+        try{
+            Category categoryToDeactivate = categoryRepository.findByCategoryCode(categoryCode)
+                .orElseThrow(() -> new EmptyResultDataAccessException("Categoría no encontrada categoryCode=" + categoryCode, 1));
+
+            categoryToDeactivate.setActive(false);
+            categoryRepository.save(categoryToDeactivate);
+
+            Event eventSent = kafkaMockService.sendEvent("PATCH: Categoria desactivada", categoryToDeactivate);
+            System.out.println(eventSent.toString());
+            inventoryEventPublisher.emitCategoriaDesactivada(categoryToDeactivate);
             return true;
         }catch(EmptyResultDataAccessException e){
             return false;
