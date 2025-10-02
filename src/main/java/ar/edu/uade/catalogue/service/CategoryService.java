@@ -175,4 +175,18 @@ public class CategoryService {
             return false;
         }
     }
+
+    // Nuevo: activar categoría por categoryCode
+    public Category activateCategoryByCode(Integer categoryCode) {
+        Category category = categoryRepository.findByCategoryCode(categoryCode)
+            .orElseThrow(() -> new EmptyResultDataAccessException("Categoría no encontrada categoryCode=" + categoryCode, 1));
+        if (category.isActive()) {
+            throw new IllegalStateException("La categoría ya estaba activada");
+        }
+        category.setActive(true);
+        Category saved = categoryRepository.save(category);
+        kafkaMockService.sendEvent("PATCH: Categoria activada", saved);
+        inventoryEventPublisher.emitCategoriaActivada(saved);
+        return saved;
+    }
 }

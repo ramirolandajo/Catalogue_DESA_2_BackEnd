@@ -15,6 +15,8 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -91,10 +93,14 @@ public class Product {
     @Column(name="active")
     private boolean active;
 
+    // Refactor: reviews ahora guardan también el productCode en la tabla product_reviews
     @ElementCollection
     @CollectionTable(name = "product_reviews", joinColumns = @JoinColumn(name = "product_id"))
-    @Column(name = "review_text")
-    private List<String> reviews; // mensajes de reviews
+    @AttributeOverrides({
+        @AttributeOverride(name = "reviewText", column = @Column(name = "review_text")),
+        @AttributeOverride(name = "productCode", column = @Column(name = "product_code", nullable = true))
+    })
+    private List<ReviewEntry> reviews; // reviews con productCode
 
 @Override
 public String toString(){

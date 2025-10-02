@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -137,6 +138,31 @@ public class InventoryEventPublisher {
         payload.put("name", b.getName());
         payload.put("products", b.getProducts());
         coreApiClient.postEvent(type, payload, OffsetDateTime.now());
+    }
+
+    public void emitCategoriaActivada(Category c) {
+        String type = "PATCH: Categoria activada";
+        if (!shouldEmit(type)) return;
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", c.getId());
+        payload.put("categoryCode", c.getCategoryCode());
+        payload.put("name", c.getName());
+        payload.put("products", c.getProducts());
+        coreApiClient.postEvent(type, payload, OffsetDateTime.now());
+    }
+
+    public void emitAgregarProductosBatch(java.util.List<ar.edu.uade.catalogue.model.Product> products) {
+        String type = "POST: Agregar productos (batch)";
+        if (!shouldEmit(type)) return;
+        Map<String, Object> payload = new HashMap<>();
+        java.util.List<Map<String, Object>> items = new ArrayList<>();
+        if (products != null) {
+            for (ar.edu.uade.catalogue.model.Product p : products) {
+                items.add(buildProductPayload(p));
+            }
+        }
+        payload.put("items", items);
+        coreApiClient.postEvent(type, payload, java.time.OffsetDateTime.now());
     }
 
     private Map<String, Object> buildProductPayload(Product p) {

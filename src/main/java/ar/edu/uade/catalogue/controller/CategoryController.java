@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PatchMapping;
 
 import ar.edu.uade.catalogue.model.Category;
 import ar.edu.uade.catalogue.model.Product;
@@ -72,6 +73,19 @@ public class CategoryController {
             return new ResponseEntity<>(HttpStatus.OK);
         }else{
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    // Nuevo: activar categoría por categoryCode
+    @PatchMapping(value="/activateByCode/{categoryCode}", produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<?> activateCategoryByCode(@PathVariable("categoryCode") Integer categoryCode) {
+        try {
+            Category activated = categoryService.activateCategoryByCode(categoryCode);
+            return new ResponseEntity<>(activated, HttpStatus.OK);
+        } catch (EmptyResultDataAccessException e) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        } catch (IllegalStateException e) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.CONFLICT);
         }
     }
 

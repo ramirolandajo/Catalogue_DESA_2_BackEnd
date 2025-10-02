@@ -1,9 +1,15 @@
 package ar.edu.uade.catalogue.controller;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -61,14 +67,43 @@ public class ProductController {
         }
     }
 
-    @PostMapping(value="/upload",consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?>loadBatch(@RequestParam("file") MultipartFile csvFile) throws Exception{
-        boolean succeeded = productService.loadBatchFromCSV(csvFile);
-        if(succeeded){
-            return new ResponseEntity<>("Batch cargado",HttpStatus.CREATED);
-        }else{
-            return new ResponseEntity<>("Ocurrio un error", HttpStatus.CONFLICT);
+    // Unificado: acepta multipart/form-data y text/csv|text/plain|octet-stream en el mismo endpoint
+    @PostMapping(value="/upload", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE, "text/csv", "text/plain", MediaType.APPLICATION_OCTET_STREAM_VALUE, "application/octet-stream" })
+    public ResponseEntity<?> uploadFlexible(
+            @RequestParam(value = "file", required = false) MultipartFile csvFile,
+            @RequestBody(required = false) byte[] csvBytes) throws Exception {
+        boolean succeeded = false;
+        if (csvFile != null && !csvFile.isEmpty()) {
+            succeeded = productService.loadBatchFromCSV(csvFile);
+        } else if (csvBytes != null && csvBytes.length > 0) {
+            // Usar el parser robusto basado en String (normalización + multi-separador)
+            String content = new String(csvBytes, StandardCharsets.UTF_8);
+            succeeded = productService.loadBatchFromString(content);
+        } else {
+            return new ResponseEntity<>("No se recibió archivo ni cuerpo CSV", HttpStatus.BAD_REQUEST);
         }
+        return new ResponseEntity<>(succeeded ? "Batch cargado" : "Ocurrio un error", succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+    }
+
+    // Alternativa: subir CSV como texto/raw (Insomnia/Postman) sin multipart (ruta dedicada)
+    @PostMapping(value = "/uploadRaw", consumes = {"text/csv", "text/plain", MediaType.APPLICATION_OCTET_STREAM_VALUE, "application/octet-stream"})
+    public ResponseEntity<?> loadBatchRaw(@RequestBody byte[] csvBytes) throws Exception {
+        String content = new String(csvBytes, StandardCharsets.UTF_8);
+        boolean succeeded = productService.loadBatchFromString(content);
+        return new ResponseEntity<>(succeeded ? "Batch cargado" : "Ocurrio un error", succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+    }
+
+    // Nuevo: exportar todos los productos en CSV (mismo formato que import) y forzar descarga
+    @GetMapping(value = "/export", produces = { "text/csv" })
+    public ResponseEntity<byte[]> exportProductsCsv() {
+        byte[] csv = productService.exportProductsCsv();
+        String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        String filename = "products-" + ts + ".csv";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv"));
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+        headers.setContentLength(csv.length);
+        return new ResponseEntity<>(csv, headers, HttpStatus.OK);
     }
 
     @PatchMapping(value="/update", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
