@@ -16,6 +16,12 @@ public class BackendTokenManager {
     @Value("${keycloak.refresh.enabled:false}")
     private boolean refreshEnabled;
 
+    @Value("${keycloak.token.maxAttempts:3}")
+    private int maxAttempts;
+
+    @Value("${keycloak.token.backoff.ms:500}")
+    private long backoffMs;
+
     private volatile String cachedToken;
     private volatile long expiresAtEpochSeconds = 0L;
 
@@ -28,22 +34,24 @@ public class BackendTokenManager {
         if (cachedToken != null && now < (expiresAtEpochSeconds - 30)) { // 30s skew
             return cachedToken;
         }
-        int attempts = 0;
         RuntimeException last = null;
-        while (attempts < 2) {
-            attempts++;
+        for (int attempt = 1; attempt <= Math.max(1, maxAttempts); attempt++) {
             try {
                 KeycloakClient.TokenResponse tr = keycloakClient.fetchClientCredentialsToken();
                 this.cachedToken = tr.accessToken();
+                // Recalcular now dentro del ciclo
+                now = Instant.now().getEpochSecond();
                 this.expiresAtEpochSeconds = now + Math.max(30, tr.expiresIn());
-                log.debug("[Auth] Token obtenido, expira en {}s", tr.expiresIn());
+                log.debug("[Auth] Token obtenido en intento {}. Expira en {}s", attempt, tr.expiresIn());
                 return cachedToken;
             } catch (RuntimeException ex) {
                 last = ex;
-                try { Thread.sleep(400L * attempts); } catch (InterruptedException ignored) {}
+                log.warn("[Auth] Falló intento {} de {} para obtener token: {}", attempt, maxAttempts, ex.toString());
+                if (attempt < maxAttempts) {
+                    try { Thread.sleep(backoffMs); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                }
             }
         }
         throw last != null ? last : new RuntimeException("No se pudo obtener token");
     }
 }
-

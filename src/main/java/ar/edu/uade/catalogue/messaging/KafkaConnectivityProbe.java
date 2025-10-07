@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Component
+@Order(1)
 @ConditionalOnProperty(prefix = "inventario.kafka", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class KafkaConnectivityProbe implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(KafkaConnectivityProbe.class);

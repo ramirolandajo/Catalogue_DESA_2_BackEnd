@@ -31,13 +31,17 @@ public class KeycloakClient {
     @Value("${keycloak.client-secret}")
     private String clientSecret;
 
-    public KeycloakClient(RestTemplateBuilder builder) {
-        // RestTemplate sin interceptor
-        this.restTemplate = builder
-                .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(10))
-                .build();
-    }
+   public KeycloakClient(RestTemplateBuilder builder) {
+       // RestTemplate sin interceptor
+       this.restTemplate = builder
+               .requestFactory(() -> {
+                   var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+                   factory.setConnectTimeout(Duration.ofSeconds(5));
+                   factory.setReadTimeout(Duration.ofSeconds(10));
+                   return factory;
+               })
+               .build();
+   }
 
     public record TokenResponse(@JsonProperty("access_token") String accessToken,
                                 @JsonProperty("expires_in") int expiresIn) {}

@@ -61,6 +61,9 @@ public class KafkaInventarioConsumerConfig {
     @Value("${inventario.kafka.concurrency:3}")
     private Integer concurrency;
 
+    @Value("${spring.kafka.listener.auto-startup:false}")
+    private boolean autoStartup;
+
     @Bean
     public ConsumerFactory<String, Object> inventarioConsumerFactory() {
         Map<String, Object> props = new HashMap<>();
@@ -89,6 +92,7 @@ public class KafkaInventarioConsumerConfig {
         if (concurrency != null) {
             factory.setConcurrency(concurrency);
         }
+        factory.setAutoStartup(autoStartup);
         factory.getContainerProperties().setMissingTopicsFatal(false);
         // Converter para headers/strings, por si llega como texto
         factory.setRecordMessageConverter(new StringJsonMessageConverter());
