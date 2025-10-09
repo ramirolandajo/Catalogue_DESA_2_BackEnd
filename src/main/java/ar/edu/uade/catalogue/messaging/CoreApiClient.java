@@ -7,6 +7,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -48,10 +49,15 @@ public class CoreApiClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
 
         try {
             restTemplate.postForLocation(intermediaryBaseUrl + "/events", new HttpEntity<>(coreEvent, headers));
             log.info("[CoreApi] POST /events OK type='{}' origin='{}'", type, origin);
+        } catch (HttpStatusCodeException e) {
+            String body = e.getResponseBodyAsString();
+            log.error("[CoreApi] Error POST /events type='{}': {} {} body={}", type, e.getStatusCode().value(), e.getStatusText(), safe(body));
+            throw e;
         } catch (RestClientException e) {
             log.error("[CoreApi] Error POST /events type='{}': {}", type, e.getMessage());
             throw e;
@@ -61,12 +67,22 @@ public class CoreApiClient {
     public void ackEvent(String eventId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
         try {
             restTemplate.postForLocation(intermediaryBaseUrl + "/events/" + eventId + "/ack", new HttpEntity<>("{}", headers));
             log.info("[CoreApi] ACK OK eventId='{}'", eventId);
+        } catch (HttpStatusCodeException e) {
+            String body = e.getResponseBodyAsString();
+            log.error("[CoreApi] Error ACK eventId='{}': {} {} body={}", eventId, e.getStatusCode().value(), e.getStatusText(), safe(body));
+            throw e;
         } catch (RestClientException e) {
             log.error("[CoreApi] Error ACK eventId='{}': {}", eventId, e.getMessage());
             throw e;
         }
+    }
+
+    private String safe(String s) {
+        if (s == null) return "<null>";
+        return s.length() > 500 ? s.substring(0, 500) + "..." : s;
     }
 }

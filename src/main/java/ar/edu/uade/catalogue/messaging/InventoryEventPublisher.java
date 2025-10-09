@@ -56,7 +56,8 @@ public class InventoryEventPublisher {
     }
 
     public void emitAgregarProducto(Product p) {
-        String type = "POST: Agregar un producto";
+        // Ajustado: tipo consistente con contrato
+        String type = "POST: Producto creado";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = buildProductPayload(p);
         coreApiClient.postEvent(type, payload, OffsetDateTime.now());
@@ -180,17 +181,22 @@ public class InventoryEventPublisher {
         List<Integer> categoryCodes = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getCategoryCode).collect(Collectors.toList());
         List<Integer> categoryIds = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getId).collect(Collectors.toList());
         payload.put("categories", categoryCodes);
+        payload.put("categoryCodes", categoryCodes); // alias
         payload.put("categoryIds", categoryIds);
         // Marca por código prioritario + compat
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
         Integer brandId = p.getBrand() == null ? null : p.getBrand().getId();
         payload.put("brand", brandCode);
+        payload.put("brandCode", brandCode); // alias
         payload.put("brandId", brandId);
         payload.put("calification", p.getCalification());
         payload.put("images", p.getImages());
         payload.put("new", p.isNew());
+        payload.put("is_new", p.isNew()); // alias
         payload.put("bestSeller", p.isBestSeller());
+        payload.put("is_best_seller", p.isBestSeller()); // alias
         payload.put("featured", p.isFeatured());
+        payload.put("is_featured", p.isFeatured()); // alias
         payload.put("hero", p.isHero());
         payload.put("active", p.isActive());
         return payload;
