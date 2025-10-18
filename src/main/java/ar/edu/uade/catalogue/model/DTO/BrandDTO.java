@@ -10,6 +10,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class BrandDTO {
+    private Integer brandCode; // nuevo identificador unificado requerido
     private String name;
     private boolean active;    
 }

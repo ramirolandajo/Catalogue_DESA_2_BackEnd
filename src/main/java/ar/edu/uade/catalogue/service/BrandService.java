@@ -14,6 +14,7 @@ import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.model.DTO.BrandDTO;
 import ar.edu.uade.catalogue.repository.BrandRepository;
 import ar.edu.uade.catalogue.repository.ProductRepository;
+import ar.edu.uade.catalogue.messaging.InventoryEventPublisher;
 
 @Service
 public class BrandService {
@@ -27,22 +28,23 @@ public class BrandService {
     @Autowired
     KafkaMockService kafkaMockService;
 
+    @Autowired
+    InventoryEventPublisher inventoryEventPublisher;
+
     public List<Brand>getBrands(){
         return brandRepository.findAll().stream().toList();
     }
 
     public List<Product>getProductsFromBrand(Integer id){
         Optional<Brand> brandOptional = brandRepository.findById(id);
-        Brand brand = brandOptional.get();
-
+        Brand brand = brandOptional.orElseThrow(() -> new EmptyResultDataAccessException("Marca no encontrada id=" + id, 1));
         List<Integer>products = brand.getProducts();
-        
         List<Product>productsFound = new ArrayList<>();
-
-        for (Integer productCode : products) {
-            productsFound.add(productRepository.findByProductCode(productCode).get());
+        if (products != null) {
+            for (Integer productCode : products) {
+                productRepository.findByProductCode(productCode).ifPresent(productsFound::add);
+            }
         }
-
         return productsFound;
     }
 
@@ -51,26 +53,41 @@ public class BrandService {
         return brandOptional.orElse(null);
     }
 
+    public Brand getBrandByCode(Integer brandCode){
+        return brandRepository.findByBrandCode(brandCode).orElse(null);
+    }
+
     public void addProductToBrand(Integer productCode, Integer id){
         Optional<Brand> brandOptional = brandRepository.findById(id);
-        Brand brandToUpdate = brandOptional.get();
+        Brand brandToUpdate = brandOptional.orElseThrow(() -> new EmptyResultDataAccessException("Marca no encontrada id=" + id, 1));
 
         List<Integer>productsFromBrand = brandToUpdate.getProducts();
-        productsFromBrand.add(productCode);
+        if (productsFromBrand == null) {
+            productsFromBrand = new ArrayList<>();
+            brandToUpdate.setProducts(productsFromBrand);
+        }
+        if (!productsFromBrand.contains(productCode)) {
+            productsFromBrand.add(productCode);
+        }
 
-        brandToUpdate.setProducts(productsFromBrand);
         Event eventSent = kafkaMockService.sendEvent
-            ("PATCH: producto " + String.valueOf(productCode)
-             + " agregado a la marca: + " + String.valueOf(id) , brandToUpdate);
+            ("PATCH: producto " + productCode +
+             " agregado a la marca: + " + (brandToUpdate.getBrandCode() != null ? brandToUpdate.getBrandCode() : String.valueOf(id)) , brandToUpdate);
+        System.out.println(eventSent.toString());
 
-            System.out.println(eventSent.toString());
-
-        brandRepository.save(brandToUpdate);        
+        brandRepository.save(brandToUpdate);
     }
     
     public Brand createBrand(BrandDTO brandDTO){
+        if (brandDTO.getBrandCode() == null) {
+            throw new IllegalArgumentException("brandCode es requerido para crear marca");
+        }
+        if (brandRepository.existsByBrandCode(brandDTO.getBrandCode())) {
+            throw new IllegalArgumentException("brandCode ya existe: " + brandDTO.getBrandCode());
+        }
+
         Brand brandToSave = new Brand();
-        
+        brandToSave.setBrandCode(brandDTO.getBrandCode());
         brandToSave.setName(brandDTO.getName());
         brandToSave.setProducts(new ArrayList<>());
         brandToSave.setActive(brandDTO.isActive());
@@ -78,21 +95,61 @@ public class BrandService {
         Event eventSent = kafkaMockService.sendEvent("POST: Marca creada", brandToSave);
         System.out.println(eventSent.toString());
 
-        return brandRepository.save(brandToSave);
+        Brand saved = brandRepository.save(brandToSave);
+        // Emisión hacia middleware
+        inventoryEventPublisher.emitMarcaCreada(saved);
+        return saved;
     }
 
-    public boolean deleteBrand(Integer id){
-        //Borrado logico
+    // Nuevo: activar marca por brandCode
+    public Brand activateBrandByCode(Integer brandCode) {
+        Brand brand = brandRepository.findByBrandCode(brandCode)
+            .orElseThrow(() -> new EmptyResultDataAccessException("Marca no encontrada brandCode=" + brandCode, 1));
+        if (brand.isActive()) {
+            throw new IllegalStateException("La marca ya estaba activada");
+        }
+        brand.setActive(true);
+        Brand saved = brandRepository.save(brand);
+        // Persistir y emitir evento de activación
+        kafkaMockService.sendEvent("PATCH: Marca activada", saved);
+        inventoryEventPublisher.emitMarcaActivada(saved);
+        return saved;
+    }
+
+    // Cambiado: desactivar por brandCode (ya no por id)
+    public boolean deleteBrandByCode(Integer brandCode){
         try{
-            Optional<Brand> brandOptional = brandRepository.findById(id);
-            Brand brandToDeactivate = brandOptional.get();
-           
+            Brand brandToDeactivate = brandRepository.findByBrandCode(brandCode)
+                .orElseThrow(() -> new EmptyResultDataAccessException("Marca no encontrada brandCode=" + brandCode, 1));
+
             brandToDeactivate.setActive(false);
             brandRepository.save(brandToDeactivate);
 
             Event eventSent = kafkaMockService.sendEvent("PATCH: Marca desactivada", brandToDeactivate);
             System.out.println(eventSent.toString());
-            
+            // Emisión hacia middleware
+            inventoryEventPublisher.emitMarcaDesactivada(brandToDeactivate);
+
+            return true;
+        }catch(EmptyResultDataAccessException e){
+            return false;
+        }
+    }
+
+    // Método legacy por id (se mantiene por compatibilidad, pero preferir deleteBrandByCode)
+    public boolean deleteBrand(Integer id){
+        try{
+            Optional<Brand> brandOptional = brandRepository.findById(id);
+            Brand brandToDeactivate = brandOptional.orElseThrow(() -> new EmptyResultDataAccessException("Marca no encontrada id=" + id, 1));
+
+            brandToDeactivate.setActive(false);
+            brandRepository.save(brandToDeactivate);
+
+            Event eventSent = kafkaMockService.sendEvent("PATCH: Marca desactivada", brandToDeactivate);
+            System.out.println(eventSent.toString());
+            // Emisión hacia middleware
+            inventoryEventPublisher.emitMarcaDesactivada(brandToDeactivate);
+
             return true; 
         }catch(EmptyResultDataAccessException e){
             return false;
