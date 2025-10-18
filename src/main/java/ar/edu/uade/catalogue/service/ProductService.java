@@ -1,5 +1,6 @@
 package ar.edu.uade.catalogue.service;
 
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
@@ -53,6 +54,9 @@ public class ProductService {
     @Autowired
     InventoryEventPublisher inventoryEventPublisher;
 
+    @Autowired
+    S3ImageService s3ImageService;
+
     public List<Product>getProducts(){
         return productRepository.findAll();
     }
@@ -62,11 +66,11 @@ public class ProductService {
         return productOptional.orElse(null);
     }
 
-    public Product createProduct(ProductDTO productDTO){
+    public Product createProduct(ProductDTO productDTO) throws IOException {
         return saveProduct(productDTO, false);
     }
 
-    private Product saveProduct(ProductDTO productDTO, boolean suppressEvents){
+    private Product saveProduct(ProductDTO productDTO, boolean suppressEvents) throws IOException {
         // Resolver categorías por códigos (prioritario) o por IDs legacy
         List<Category> categoriesToSave = (productDTO.getCategoryCodes() != null && !productDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productDTO.getCategoryCodes())
@@ -90,7 +94,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(productDTO.getImages());
+        productToSave.setImages(imagesToS3Bucket(productDTO.getImages()));
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -119,6 +123,16 @@ public class ProductService {
         return productToSave;
     }
 
+    private List<String> imagesToS3Bucket(List<String>dtoImages) throws IOException {
+        List<String> s3Images = new ArrayList<>();
+
+        for (String image :
+                dtoImages) {
+            s3Images.add(s3ImageService.fromUrlToS3(image));
+        }
+
+        return s3Images;
+    }
     public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
         // Leemos todo el contenido para poder intentar con múltiples separadores y normalizaciones
         String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
