@@ -28,7 +28,10 @@ public class Category {
     @GeneratedValue(strategy = GenerationType.IDENTITY) 
     @Column(name = "category_id")
     private Integer id;
-    
+
+    @Column(name = "category_code", unique = true, nullable = true)
+    private Integer categoryCode; // identificador unificado
+
     @Column(name = "name")
     private String name;
     

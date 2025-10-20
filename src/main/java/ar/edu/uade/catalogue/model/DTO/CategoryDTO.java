@@ -11,6 +11,7 @@ import lombok.Setter;
 @Setter
 
 public class CategoryDTO {
+    private Integer categoryCode; // nuevo identificador unificado
     private String name;
     private boolean active;
 }

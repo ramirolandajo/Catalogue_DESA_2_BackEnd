@@ -5,7 +5,11 @@ import org.springframework.stereotype.Repository;
 
 import ar.edu.uade.catalogue.model.Category;
 
+import java.util.Optional;
+
 
 @Repository
 public interface CategoryRepository extends JpaRepository<Category,Integer>{
+    Optional<Category> findByCategoryCode(Integer categoryCode);
+    boolean existsByCategoryCode(Integer categoryCode);
 }

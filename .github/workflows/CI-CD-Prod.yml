@@ -1,0 +1,73 @@
+name: Build & Deploy Backend (Production)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Handles multiple workflows running at the same time (queues them)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: CI - Build
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: backend-jar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '17'
+
+      # Caches dependencies so build time is shorter on future builds
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Build with Maven
+        run: mvn -B clean package
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: target/app.jar
+          if-no-files-found: error
+
+  deploy:
+    name: CD - Deploy to Elastic Beanstalk (Prod)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: ./artifact
+
+      - name: Set version label
+        id: version
+        run: echo "VERSION_LABEL=$(date +'%Y-%m-%d-%H%M%S')" >> $GITHUB_ENV
+
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: "Catalogue Prod"
+          environment_name: Catalogue-prod-env
+          existing_bucket_name: catalogue-prod-backend-bucket
+          version_label: ${{ env.VERSION_LABEL }}
+          region: sa-east-1
+          deployment_package: ./artifact/app.jar

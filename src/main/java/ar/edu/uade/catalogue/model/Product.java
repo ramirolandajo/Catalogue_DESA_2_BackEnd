@@ -4,6 +4,8 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -13,6 +15,8 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -69,7 +73,9 @@ public class Product {
     @JoinColumn(name = "brand_id")
     private Brand brand;
    
-    @Column(name = "images")
+    @ElementCollection
+    @CollectionTable(name = "product_images", joinColumns = @JoinColumn(name = "product_id"))
+    @Column(name = "image_url")
     private List<String> images; //Solo links a las img
 
     @Column(name="isNew")
@@ -86,6 +92,15 @@ public class Product {
 
     @Column(name="active")
     private boolean active;
+
+    // Refactor: reviews ahora guardan también el productCode en la tabla product_reviews
+    @ElementCollection
+    @CollectionTable(name = "product_reviews", joinColumns = @JoinColumn(name = "product_id"))
+    @AttributeOverrides({
+        @AttributeOverride(name = "reviewText", column = @Column(name = "review_text")),
+        @AttributeOverride(name = "productCode", column = @Column(name = "product_code", nullable = true))
+    })
+    private List<ReviewEntry> reviews; // reviews con productCode
 
 @Override
 public String toString(){
