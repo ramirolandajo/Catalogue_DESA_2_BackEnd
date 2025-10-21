@@ -1,5 +1,6 @@
 package ar.edu.uade.catalogue.service;
 
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
@@ -52,6 +53,9 @@ public class ProductService {
 
     @Autowired
     InventoryEventPublisher inventoryEventPublisher;
+
+    @Autowired
+    S3ImageService s3ImageService;
 
     public List<Product>getProducts(){
         return productRepository.findAll();
@@ -117,6 +121,26 @@ public class ProductService {
         }
 
         return productToSave;
+    }
+
+    // Metodos para manejo de imagenes con S3 links y multi part. Borrar el que no corresponda
+    public List<String>uploadToS3(List<MultipartFile>files){
+        List<String> s3Images = new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            s3Images.add(s3ImageService.uploadImage(file));
+        }
+
+        return s3Images;
+    }
+
+    public List<String>urlToS3(List<String>images) throws IOException{
+        List<String> s3Images = new ArrayList<>();
+
+        for (String url : images) {
+            s3Images.add(s3ImageService.fromUrlToS3(url));
+        }
+        return s3Images;
     }
 
     public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
