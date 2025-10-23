@@ -66,11 +66,11 @@ public class ProductService {
         return productOptional.orElse(null);
     }
 
-    public Product createProduct(ProductDTO productDTO){
+    public Product createProduct(ProductDTO productDTO) throws IOException {
         return saveProduct(productDTO, false);
     }
 
-    private Product saveProduct(ProductDTO productDTO, boolean suppressEvents){
+    private Product saveProduct(ProductDTO productDTO, boolean suppressEvents) throws IOException {
         // Resolver categorías por códigos (prioritario) o por IDs legacy
         List<Category> categoriesToSave = (productDTO.getCategoryCodes() != null && !productDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productDTO.getCategoryCodes())
@@ -94,7 +94,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(productDTO.getImages());
+        productToSave.setImages(urlToS3(productDTO.getImages()));
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -452,7 +452,7 @@ public class ProductService {
         return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("y") || v.equals("si") || v.equals("sí");
     }
 
-    public Product updateProduct(ProductDTO productUpdateDTO){
+    public Product updateProduct(ProductDTO productUpdateDTO) throws IOException {
         List<Category>categoriesToUpdate = (productUpdateDTO.getCategoryCodes() != null && !productUpdateDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productUpdateDTO.getCategoryCodes())
                 : categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
@@ -475,7 +475,7 @@ public class ProductService {
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
-        productToUpdate.setImages(productUpdateDTO.getImages());
+        productToUpdate.setImages(urlToS3(productUpdateDTO.getImages()));
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());
