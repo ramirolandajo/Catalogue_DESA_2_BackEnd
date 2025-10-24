@@ -10,6 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -113,7 +114,7 @@ class ProductServiceTest {
     }
 
     @Test
-    void updateProduct_ShouldModifyAndReturnUpdated() {
+    void updateProduct_ShouldModifyAndReturnUpdated() throws IOException {
         when(productRepository.findByProductCode(1001)).thenReturn(Optional.of(product));
         when(categoryService.geCategoriesForProductByID(anyList())).thenReturn(List.of(category));
         when(brandService.getBrandByID(anyInt())).thenReturn(brand);
