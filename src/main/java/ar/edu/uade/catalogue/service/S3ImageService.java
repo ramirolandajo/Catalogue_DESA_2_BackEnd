@@ -1,15 +1,13 @@
 package ar.edu.uade.catalogue.service;
 
-import lombok.Value;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
@@ -57,36 +55,6 @@ public class S3ImageService {
 
             s3Client.putObject(request, RequestBody.fromInputStream(inputStream, inputStream.available()));
         }
-
-        return "https://" + bucketName + ".s3.amazonaws.com/" + key;
-    }
-
-    public String uploadImage(MultipartFile file){
-        if(file.isEmpty()){
-            throw new IllegalArgumentException("Archivo vacio");
-        }
-
-        // Generando nombre unico para evitar colisiones
-        String originalName = file.getOriginalFilename();
-        String extension = "";
-
-        if (originalName != null && originalName.contains(".")) {
-            extension = originalName.substring(originalName.lastIndexOf("."));
-        }
-
-        // construyo la key de la imagen 
-        String key = "products/" + UUID.randomUUID() + extension;
-
-        // Request de subida
-        PutObjectRequest request = new PutObjectRequest().builder()
-           .bucket(bucketName)
-           .key(key)
-           .acl(ObjectCannedACL.PUBLIC_READ) // Cualquiera con la URL ve la imagen
-           .build();
-
-        
-           // Subir el archivo
-        s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
         return "https://" + bucketName + ".s3.amazonaws.com/" + key;
     }
