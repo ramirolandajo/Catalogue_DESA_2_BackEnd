@@ -123,17 +123,6 @@ public class ProductService {
         return productToSave;
     }
 
-    // Metodos para manejo de imagenes con S3 links y multi part. Borrar el que no corresponda
-    public List<String>uploadToS3(List<MultipartFile>files){
-        List<String> s3Images = new ArrayList<>();
-
-        for (MultipartFile file : files) {
-            s3Images.add(s3ImageService.uploadImage(file));
-        }
-
-        return s3Images;
-    }
-
     public List<String>urlToS3(List<String>images) throws IOException{
         List<String> s3Images = new ArrayList<>();
 
