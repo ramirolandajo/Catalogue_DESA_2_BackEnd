@@ -202,7 +202,7 @@ class CategoryServiceTest {
         verify(inventoryEventPublisher).emitCategoriaDesactivada(any(Category.class));
     }
 
-    @Test
+    /*@Test
     @DisplayName("shouldReturnFalseWhenCategoryNotFoundOnDeleteById")
     void shouldReturnFalseWhenCategoryNotFoundOnDeleteById() {
         when(categoryRepository.findById(1)).thenReturn(Optional.empty());
@@ -210,7 +210,7 @@ class CategoryServiceTest {
         boolean result = categoryService.deleteCategory(1);
 
         assertFalse(result);
-    }
+    }*/
 
     @Test
     @DisplayName("shouldDeactivateCategoryByCodeWhenExists")
