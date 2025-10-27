@@ -27,9 +27,6 @@ import java.util.concurrent.TimeUnit;
             log.info("[KafkaStartup] Verificando conexión a Kafka...");
 
             Map<String, Object> cfg = new HashMap<>(kafkaAdmin.getConfigurationProperties());
-            // Add short timeouts for startup check
-            cfg.put("request.timeout.ms", 5000);
-            cfg.put("retries", 0);
 
             Exception lastEx = null;
 

@@ -42,8 +42,7 @@ public class SalesEventsListener {
         this.coreApiClient = coreApiClient;
     }
 
-    @KafkaListener(topics = "${inventario.kafka.sales-topic:ventas.events}",
-            containerFactory = "kafkaListenerContainerFactory")
+    @KafkaListener(topics = "${inventario.kafka.sales-topic:ventas.events}")
     public void onMessage(ConsumerRecord<String, Object> record, Acknowledgment ack) {
         try {
             log.info("[VentasConsumer] In msg topic={} partition={} offset={} key={} valueType={}", record.topic(), record.partition(), record.offset(), record.key(), (record.value()==null?"null":record.value().getClass().getName()));
