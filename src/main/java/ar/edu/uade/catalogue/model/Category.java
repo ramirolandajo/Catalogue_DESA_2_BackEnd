@@ -38,7 +38,7 @@ public class Category {
     
     //@Column(name = "products")
     @ManyToMany(mappedBy = "categories")
-    List<Integer>products;
+    List<Product>products;
 
     @Column(name="active", nullable=false)
     private boolean active;

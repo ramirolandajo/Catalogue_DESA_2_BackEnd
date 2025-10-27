@@ -37,7 +37,7 @@ public class Brand {
 
     //@Column(name = "products")
     @OneToMany(mappedBy = "brand")
-    private List<Integer>products;
+    private List<Product>products;
 
     @Column(name="active", nullable=false)
     private boolean active;
