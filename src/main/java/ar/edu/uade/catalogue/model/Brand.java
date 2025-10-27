@@ -35,7 +35,8 @@ public class Brand {
     @Column(name = "name")
     private String name;
 
-    @Column(name = "products")
+    //@Column(name = "products")
+    @OneToMany(mappedBy = "brand")
     private List<Integer>products;
 
     @Column(name="active", nullable=false)

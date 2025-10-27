@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -35,7 +36,8 @@ public class Category {
     @Column(name = "name")
     private String name;
     
-    @Column(name = "products")
+    //@Column(name = "products")
+    @ManyToMany(mappedBy = "categories")
     List<Integer>products;
 
     @Column(name="active", nullable=false)
