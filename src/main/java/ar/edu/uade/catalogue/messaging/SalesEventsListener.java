@@ -14,6 +14,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -29,7 +30,7 @@ public class SalesEventsListener {
     private final InventoryOrderSyncService inventoryService;
     private final CoreApiClient coreApiClient;
 
-    @Value("${inventario.kafka.sales-topic:ventas.events}")
+    @Value("${inventario.kafka.sales-topic}")
     private String topicName;
 
     public SalesEventsListener(ObjectMapper objectMapper,
@@ -42,7 +43,15 @@ public class SalesEventsListener {
         this.coreApiClient = coreApiClient;
     }
 
-    @KafkaListener(topics = "${inventario.kafka.sales-topic:ventas.events}",
+    @PostConstruct
+    void init() {
+        if (topicName == null || topicName.trim().isEmpty()) {
+            throw new IllegalStateException("La propiedad inventario.kafka.sales-topic está vacía o no definida (debe apuntar al topic 'ventas').");
+        }
+        log.info("[VentasConsumer][Init] Topic configurado para consumo='{}'", topicName);
+    }
+
+    @KafkaListener(topics = "#{__listener.topicName}",
             containerFactory = "kafkaListenerContainerFactory")
     public void onMessage(ConsumerRecord<String, Object> record, Acknowledgment ack) {
         try {
