@@ -20,14 +20,14 @@ import java.util.UUID;
 public class S3ImageService {
     private final S3Client s3Client;
     private final String bucketName;
+    private final String region;
 
     public S3ImageService(
-            @Value("${cloud.aws.region.static}") String region,
-            @Value("${cloud.aws.s3.bucket-name}") String bucketName,
             @Value("${AWS_ACCESS_KEY_ID}") String accessKey,
             @Value("${AWS_SECRET_ACCESS_KEY}") String secretKey) {
 
-        this.bucketName = bucketName;
+        this.bucketName = "d2-product-images-bucket";
+        this.region = "sa-east-1";
         this.s3Client = S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(

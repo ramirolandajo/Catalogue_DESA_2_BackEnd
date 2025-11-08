@@ -16,15 +16,14 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("CompuMundoHiperMegaRed | Catalogue | Desarrollo de Apps 2")
                         .version("1.0.0")
-                        .description("Es una app que cuenta con varios modulos" +
-                        " desarrollados con un back-end en Java, con el framework" +
+                        .description("Es uno de los modulos de una aplicacion orientada a eventos" +
+                        " desarrollado con un back-end en Java, con el framework" +
                         " Springboot y utilizando MySql para la persistencia." +
-                        " Finalmente se utilizo Swagger para la documentacion de la API ")
+                        " Finalmente se utilizo Swagger para la documentacion de la API.")
                         .contact(new Contact()
-                                .name("Sebastian Bernasconi | Ramiro Landajo | Enzo Asplanatti | "
-                                + "Nikolas Berntsen | Santino Casalini | Francisco Fabrello | " 
-                                + "Elisheba Tawil")
-                                .email("sebernasconi@uade.edu.ar | poner el resto")
+                                .name("Asplanatti Enzo | Bernasconi Sebastian | Berntsen Nikolas |" +
+                                        " Lautaro Casalini | Fabrello Francisco | Landajo Ramiro |"
+                                + " Tawil Elisheba ")
 
                         )
                 );
