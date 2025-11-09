@@ -63,8 +63,8 @@ jobs:
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v21
         with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
           application_name: "Catalogue Dev"
           environment_name: Catalogue-dev-env
           existing_bucket_name: catalogue-dev-backend-bucket
