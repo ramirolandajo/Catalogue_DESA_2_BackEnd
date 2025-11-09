@@ -40,10 +40,9 @@ public class CoreApiClient {
 
     public void postEvent(String type, Object payload, OffsetDateTime timestamp) {
         String origin = (configuredOriginModule != null && !configuredOriginModule.isBlank()) ? configuredOriginModule : clientId;
-        // timestamp como segundos+nanos (9 decimales) desde epoch UTC
-        long epochSecond = timestamp.toEpochSecond();
-        int nano = timestamp.getNano();
-        BigDecimal ts = BigDecimal.valueOf(epochSecond).add(BigDecimal.valueOf(nano, 9));
+
+        long epochMilli = timestamp.toInstant().toEpochMilli();
+        BigDecimal ts = BigDecimal.valueOf(epochMilli);
 
         CoreEvent coreEvent = new CoreEvent(UUID.randomUUID().toString(), type, type, ts, origin, payload);
 
