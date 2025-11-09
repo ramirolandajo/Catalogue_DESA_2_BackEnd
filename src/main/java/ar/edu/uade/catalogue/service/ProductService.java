@@ -94,7 +94,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(imagesToS3Bucket(productDTO.getImages()));
+        productToSave.setImages(urlToS3(productDTO.getImages()));
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -123,16 +123,15 @@ public class ProductService {
         return productToSave;
     }
 
-    private List<String> imagesToS3Bucket(List<String>dtoImages) throws IOException {
+    public List<String>urlToS3(List<String>images) throws IOException{
         List<String> s3Images = new ArrayList<>();
 
-        for (String image :
-                dtoImages) {
-            s3Images.add(s3ImageService.fromUrlToS3(image));
+        for (String url : images) {
+            s3Images.add(s3ImageService.fromUrlToS3(url));
         }
-
         return s3Images;
     }
+
     public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
         // Leemos todo el contenido para poder intentar con múltiples separadores y normalizaciones
         String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
@@ -442,7 +441,7 @@ public class ProductService {
         return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("y") || v.equals("si") || v.equals("sí");
     }
 
-    public Product updateProduct(ProductDTO productUpdateDTO){
+    public Product updateProduct(ProductDTO productUpdateDTO) throws IOException {
         List<Category>categoriesToUpdate = (productUpdateDTO.getCategoryCodes() != null && !productUpdateDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productUpdateDTO.getCategoryCodes())
                 : categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
@@ -465,7 +464,7 @@ public class ProductService {
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
-        productToUpdate.setImages(productUpdateDTO.getImages());
+        productToUpdate.setImages(urlToS3(productUpdateDTO.getImages()));
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());
@@ -489,7 +488,6 @@ public class ProductService {
 
     private java.util.Map<String, Object> buildProductModificationPayload(Product p) {
         HashMap<String, Object> map = new HashMap<>();
-        map.put("id", p.getId());
         map.put("productCode", p.getProductCode());
         map.put("name", p.getName());
         map.put("description", p.getDescription());
@@ -504,7 +502,6 @@ public class ProductService {
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
         Integer brandId = p.getBrand() == null ? null : p.getBrand().getId();
         map.put("brand", brandCode);    // nuevo contrato
-        map.put("brandId", brandId);    // compat
         map.put("calification", p.getCalification());
         map.put("images", p.getImages() == null ? List.of() : new java.util.ArrayList<>(p.getImages()));
         map.put("new", p.isNew());

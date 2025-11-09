@@ -1,7 +1,8 @@
 package ar.edu.uade.catalogue.service;
 
-import lombok.Value;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -19,14 +20,14 @@ import java.util.UUID;
 public class S3ImageService {
     private final S3Client s3Client;
     private final String bucketName;
+    private final String region;
 
     public S3ImageService(
-            @Value("${cloud.aws.region.static}") String region,
-            @Value("${cloud.aws.s3.bucket-name}") String bucketName,
             @Value("${AWS_ACCESS_KEY_ID}") String accessKey,
             @Value("${AWS_SECRET_ACCESS_KEY}") String secretKey) {
 
-        this.bucketName = bucketName;
+        this.bucketName = "d2-product-images-bucket";
+        this.region = "sa-east-1";
         this.s3Client = S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
@@ -34,6 +35,8 @@ public class S3ImageService {
                 ))
         .build();
     }
+
+    // Aca estan los dos metodos. Dependiendo del manejo que elijamos borrar el otro metodo
 
     public String fromUrlToS3 (String sourceUrl) throws IOException {
         URL url = new URL(sourceUrl);

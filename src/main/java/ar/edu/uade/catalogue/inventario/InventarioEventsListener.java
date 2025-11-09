@@ -35,8 +35,7 @@ public class InventarioEventsListener {
     }
 
     @KafkaListener(topics = "${inventario.kafka.internal-topic:inventario}",
-            groupId = "${spring.kafka.consumer.group-id:inventario-ms}",
-            containerFactory = "inventarioKafkaListenerContainerFactory")
+            groupId = "${spring.kafka.consumer.group-id:inventario-ms}")
     public void onMessage(ConsumerRecord<String, Object> record, Acknowledgment ack, @Payload(required = false) Object ignoredPayload) {
         // Manejo de errores de deserialización: saltar y ACK para evitar while true
         var hdr = record.headers().lastHeader(VALUE_DESER_EX_HEADER);

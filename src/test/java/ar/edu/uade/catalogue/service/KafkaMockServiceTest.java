@@ -5,74 +5,108 @@ import ar.edu.uade.catalogue.repository.EventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.*;
 
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
 class KafkaMockServiceTest {
 
+    @Mock
     private EventRepository eventRepository;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
+    @InjectMocks
     private KafkaMockService kafkaMockService;
+
+    private Event savedEvent;
 
     @BeforeEach
     void setUp() {
-        eventRepository = mock(EventRepository.class);
-        kafkaMockService = new KafkaMockService();
-        kafkaMockService.eventRepository = eventRepository; // inyectamos mock
+        savedEvent = new Event("TEST_EVENT", "{\"key\":\"value\"}");
+        savedEvent.setId(1);
+    }
+
+    // ---------------------------------------------------------
+    // sendEvent()
+    // ---------------------------------------------------------
+
+    @Test
+    @DisplayName("shouldSerializePayloadAndSaveEventSuccessfully")
+    void shouldSerializePayloadAndSaveEventSuccessfully() throws Exception {
+        String payloadJson = "{\"id\":10,\"name\":\"Product\"}";
+        when(objectMapper.writeValueAsString(any())).thenReturn(payloadJson);
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Object payload = new Object();
+        Event result = kafkaMockService.sendEvent("CREATE_PRODUCT", payload);
+
+        assertNotNull(result);
+        assertEquals("CREATE_PRODUCT", result.getType());
+        assertEquals(payloadJson, result.getPayload());
+        verify(eventRepository).save(any(Event.class));
     }
 
     @Test
-    void sendEvent_ShouldSaveJsonPayload() {
-        // Arrange
-        TestPayload payload = new TestPayload("test", 123);
-        when(eventRepository.save(any(Event.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+    @DisplayName("shouldFallbackToStringWhenJsonProcessingFails")
+    void shouldFallbackToStringWhenJsonProcessingFails() throws Exception {
+        Object payload = new Object();
+        when(objectMapper.writeValueAsString(any())).thenThrow(new JsonProcessingException("fail") {});
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // Act
-        Event savedEvent = kafkaMockService.sendEvent("TEST", payload);
+        Event result = kafkaMockService.sendEvent("FALLBACK", payload);
 
-        // Assert
-        assertEquals("TEST", savedEvent.getType());
-        assertTrue(savedEvent.getPayload().contains("\"name\":\"test\""));
-        verify(eventRepository, times(1)).save(any(Event.class));
+        assertNotNull(result);
+        assertEquals("FALLBACK", result.getType());
+        assertEquals(String.valueOf(payload), result.getPayload());
+        verify(eventRepository).save(any(Event.class));
     }
 
     @Test
-    void sendEvent_ShouldFallbackToToString_WhenJsonFails() {
-        Object invalidPayload = new Object() {
-            @Override
-            public String toString() {
-                return "fallback-string";
-            }
-        };
+    @DisplayName("shouldThrowRuntimeExceptionWhenRepositoryFails")
+    void shouldThrowRuntimeExceptionWhenRepositoryFails() throws Exception {
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+        when(eventRepository.save(any(Event.class))).thenThrow(new RuntimeException("DB error"));
 
-        when(eventRepository.save(any(Event.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        Event savedEvent = kafkaMockService.sendEvent("FAIL_JSON", invalidPayload);
-
-        assertEquals("FAIL_JSON", savedEvent.getType());
-        assertEquals("fallback-string", savedEvent.getPayload());
-    }
-
-    @Test
-    void getAll_ShouldReturnEvents() {
-        List<Event> events = Arrays.asList(
-                new Event("TYPE1", "payload1"),
-                new Event("TYPE2", "payload2")
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                kafkaMockService.sendEvent("ERROR", new Object())
         );
-        when(eventRepository.findAll()).thenReturn(events);
+
+        assertTrue(ex.getMessage().contains("Error serializando payload"));
+    }
+
+    // ---------------------------------------------------------
+    // getAll()
+    // ---------------------------------------------------------
+
+    @Test
+    @DisplayName("shouldReturnAllEventsFromRepository")
+    void shouldReturnAllEventsFromRepository() {
+        when(eventRepository.findAll()).thenReturn(List.of(savedEvent));
 
         List<Event> result = kafkaMockService.getAll();
 
-        assertEquals(2, result.size());
-        verify(eventRepository, times(1)).findAll();
+        assertEquals(1, result.size());
+        assertEquals("TEST_EVENT", result.get(0).getType());
+        verify(eventRepository).findAll();
     }
 
-    private record TestPayload(String name, int value) {}
+    @Test
+    @DisplayName("shouldReturnEmptyListWhenRepositoryHasNoEvents")
+    void shouldReturnEmptyListWhenRepositoryHasNoEvents() {
+        when(eventRepository.findAll()).thenReturn(List.of());
+
+        List<Event> result = kafkaMockService.getAll();
+
+        assertTrue(result.isEmpty());
+        verify(eventRepository).findAll();
+    }
 }

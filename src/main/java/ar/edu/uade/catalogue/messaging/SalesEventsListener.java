@@ -29,7 +29,7 @@ public class SalesEventsListener {
     private final InventoryOrderSyncService inventoryService;
     private final CoreApiClient coreApiClient;
 
-    @Value("${inventario.kafka.sales-topic:ventas.events}")
+    @Value("${inventario.kafka.sales-topic}")
     private String topicName;
 
     public SalesEventsListener(ObjectMapper objectMapper,
@@ -42,7 +42,7 @@ public class SalesEventsListener {
         this.coreApiClient = coreApiClient;
     }
 
-    @KafkaListener(topics = "${inventario.kafka.sales-topic:ventas.events}",
+    @KafkaListener(topics = "${inventario.kafka.sales-topic}",
             containerFactory = "kafkaListenerContainerFactory")
     public void onMessage(ConsumerRecord<String, Object> record, Acknowledgment ack) {
         try {

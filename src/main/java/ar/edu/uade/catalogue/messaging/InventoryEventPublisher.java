@@ -43,7 +43,6 @@ public class InventoryEventPublisher {
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
         payload.put("productCode", p.getProductCode());
-        payload.put("id", p.getId());
         payload.put("nombre", p.getName());
         payload.put("stock", p.getStock());
         payload.put("description", p.getDescription());
@@ -82,7 +81,6 @@ public class InventoryEventPublisher {
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
         payload.put("productCode", p.getProductCode());
-        payload.put("id", p.getId());
         coreApiClient.postEvent(type, payload, OffsetDateTime.now());
     }
 
@@ -90,7 +88,6 @@ public class InventoryEventPublisher {
         String type = "POST: Marca creada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", b.getId());
         payload.put("brandCode", b.getBrandCode());
         payload.put("name", b.getName());
         payload.put("products", b.getProducts());
@@ -101,7 +98,6 @@ public class InventoryEventPublisher {
         String type = "POST: Categoría creada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", c.getId());
         payload.put("categoryCode", c.getCategoryCode());
         payload.put("name", c.getName());
         payload.put("products", c.getProducts());
@@ -112,7 +108,6 @@ public class InventoryEventPublisher {
         String type = "PATCH: Marca desactivada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", b.getId());
         payload.put("brandCode", b.getBrandCode());
         payload.put("name", b.getName());
         payload.put("products", b.getProducts());
@@ -123,7 +118,6 @@ public class InventoryEventPublisher {
         String type = "PATCH: Categoria desactivada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", c.getId());
         payload.put("categoryCode", c.getCategoryCode());
         payload.put("name", c.getName());
         payload.put("products", c.getProducts());
@@ -134,7 +128,6 @@ public class InventoryEventPublisher {
         String type = "PATCH: Marca activada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", b.getId());
         payload.put("brandCode", b.getBrandCode());
         payload.put("name", b.getName());
         payload.put("products", b.getProducts());
@@ -145,7 +138,6 @@ public class InventoryEventPublisher {
         String type = "PATCH: Categoria activada";
         if (!shouldEmit(type)) return;
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", c.getId());
         payload.put("categoryCode", c.getCategoryCode());
         payload.put("name", c.getName());
         payload.put("products", c.getProducts());
@@ -168,7 +160,6 @@ public class InventoryEventPublisher {
 
     private Map<String, Object> buildProductPayload(Product p) {
         Map<String, Object> payload = new HashMap<>();
-        payload.put("id", p.getId());
         payload.put("productCode", p.getProductCode());
         payload.put("name", p.getName());
         payload.put("description", p.getDescription());
@@ -179,16 +170,12 @@ public class InventoryEventPublisher {
         payload.put("stock", p.getStock());
         // Códigos de categorías prioritarios + compat
         List<Integer> categoryCodes = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getCategoryCode).collect(Collectors.toList());
-        List<Integer> categoryIds = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getId).collect(Collectors.toList());
         payload.put("categories", categoryCodes);
         payload.put("categoryCodes", categoryCodes); // alias
-        payload.put("categoryIds", categoryIds);
         // Marca por código prioritario + compat
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
-        Integer brandId = p.getBrand() == null ? null : p.getBrand().getId();
         payload.put("brand", brandCode);
         payload.put("brandCode", brandCode); // alias
-        payload.put("brandId", brandId);
         payload.put("calification", p.getCalification());
         payload.put("images", p.getImages());
         payload.put("new", p.isNew());
