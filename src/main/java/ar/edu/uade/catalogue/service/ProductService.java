@@ -488,7 +488,6 @@ public class ProductService {
 
     private java.util.Map<String, Object> buildProductModificationPayload(Product p) {
         HashMap<String, Object> map = new HashMap<>();
-        map.put("id", p.getId());
         map.put("productCode", p.getProductCode());
         map.put("name", p.getName());
         map.put("description", p.getDescription());
@@ -503,7 +502,6 @@ public class ProductService {
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
         Integer brandId = p.getBrand() == null ? null : p.getBrand().getId();
         map.put("brand", brandCode);    // nuevo contrato
-        map.put("brandId", brandId);    // compat
         map.put("calification", p.getCalification());
         map.put("images", p.getImages() == null ? List.of() : new java.util.ArrayList<>(p.getImages()));
         map.put("new", p.isNew());
