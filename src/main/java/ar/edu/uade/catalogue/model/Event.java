@@ -41,11 +41,10 @@ public class Event {
     @Column(name = "origin")
     private String originModule;
 
-    public Event(String type, String payload, String originModule){
+    public Event(String type, String payload){
         this.type = type;
         this.payload = payload;
         this.timestamp = LocalDateTime.now();
-        this.originModule = originModule;
     }
     
     @Override
