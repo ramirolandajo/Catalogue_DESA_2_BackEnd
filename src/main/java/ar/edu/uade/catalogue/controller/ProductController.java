@@ -1,6 +1,7 @@
 package ar.edu.uade.catalogue.controller;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -111,7 +112,7 @@ public class ProductController {
         try {
             Product productUpdated = productService.patchProduct(patch);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
-        } catch (EmptyResultDataAccessException e) {
+        } catch (EmptyResultDataAccessException | IOException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }
