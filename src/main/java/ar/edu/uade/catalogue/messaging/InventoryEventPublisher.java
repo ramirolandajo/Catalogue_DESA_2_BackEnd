@@ -79,8 +79,7 @@ public class InventoryEventPublisher {
     public void emitProductoActivado(Product p) {
         String type = "PATCH: activar producto"; // cambio solicitado
         if (!shouldEmit(type)) return;
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("productCode", p.getProductCode());
+        Map<String, Object> payload = buildProductPayload(p);
         coreApiClient.postEvent(type, payload, OffsetDateTime.now());
     }
 
