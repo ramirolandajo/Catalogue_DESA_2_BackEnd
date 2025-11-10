@@ -94,7 +94,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(urlToS3(productDTO.getImages()));
+        productToSave.setImages(s3ImageService.fromUrlToS3(productDTO.getImages()));
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -121,15 +121,6 @@ public class ProductService {
         }
 
         return productToSave;
-    }
-
-    public List<String>urlToS3(List<String>images) throws IOException{
-        List<String> s3Images = new ArrayList<>();
-
-        for (String url : images) {
-            s3Images.add(s3ImageService.fromUrlToS3(url));
-        }
-        return s3Images;
     }
 
     public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
@@ -464,7 +455,7 @@ public class ProductService {
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
-        productToUpdate.setImages(urlToS3(productUpdateDTO.getImages()));
+        productToUpdate.setImages(s3ImageService.fromUrlToS3(productUpdateDTO.getImages()));
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());
@@ -619,7 +610,7 @@ public class ProductService {
         }
     }
 
-    public Product patchProduct(ProductPatchDTO patch) {
+    public Product patchProduct(ProductPatchDTO patch) throws IOException {
         if (patch.getProductCode() == null) {
             throw new EmptyResultDataAccessException("productCode es requerido para PATCH", 1);
         }
@@ -649,7 +640,7 @@ public class ProductService {
             product.setBrand(b);
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
-        if (patch.getImages() != null) product.setImages(patch.getImages());
+        if (patch.getImages() != null) product.setImages(s3ImageService.fromUrlToS3(patch.getImages()));
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
         if (patch.getIsBestSeller() != null) product.setBestSeller(patch.getIsBestSeller());
         if (patch.getIsFeatured() != null) product.setFeatured(patch.getIsFeatured());
