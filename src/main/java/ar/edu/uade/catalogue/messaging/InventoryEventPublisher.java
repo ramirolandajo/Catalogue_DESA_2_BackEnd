@@ -163,7 +163,7 @@ public class InventoryEventPublisher {
         payload.put("productCode", p.getProductCode());
         payload.put("name", p.getName());
         payload.put("description", p.getDescription());
-        payload.put("unit_price", p.getUnitPrice());
+        //payload.put("unit_price", p.getUnitPrice());
         payload.put("unitPrice", p.getUnitPrice());
         payload.put("price", p.getPrice());
         payload.put("discount", p.getDiscount());
@@ -174,7 +174,7 @@ public class InventoryEventPublisher {
         payload.put("categoryCodes", categoryCodes); // alias
         // Marca por código prioritario + compat
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
-        payload.put("brand", brandCode);
+        //payload.put("brand", brandCode);
         payload.put("brandCode", brandCode); // alias
         payload.put("calification", p.getCalification());
         payload.put("images", p.getImages());
