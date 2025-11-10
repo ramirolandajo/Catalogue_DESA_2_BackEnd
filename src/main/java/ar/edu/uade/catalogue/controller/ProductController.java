@@ -1,7 +1,6 @@
 package ar.edu.uade.catalogue.controller;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -107,12 +106,12 @@ public class ProductController {
         return new ResponseEntity<>(csv, headers, HttpStatus.OK);
     }
 
-    @PatchMapping(value="/update", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/z", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>patchProduct(@RequestBody ProductPatchDTO patch){
         try {
             Product productUpdated = productService.patchProduct(patch);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
-        } catch (EmptyResultDataAccessException | IOException e) {
+        } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
     }

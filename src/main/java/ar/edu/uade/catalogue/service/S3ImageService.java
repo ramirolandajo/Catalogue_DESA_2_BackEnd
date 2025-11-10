@@ -15,8 +15,6 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -40,40 +38,33 @@ public class S3ImageService {
                 .build();
     }
 
-    public List<String> fromUrlToS3(List<String> sourceUrls) throws IOException {
-        
-        List<String> s3Urls = new ArrayList<>();
+    public String fromUrlToS3(String sourceUrl) throws IOException {
+        URL url = new URL(sourceUrl);
 
-        for (String sourceUrl : sourceUrls) {
-            URL url = new URL(sourceUrl);
+        // Nombre del archivo
+        String fileName = Path.of(url.getPath()).getFileName().toString();
+        String key = "products/" + UUID.randomUUID() + "-" + fileName;
 
-            // Nombre del archivo
-            String fileName = Path.of(url.getPath()).getFileName().toString();
-            String key = "products/" + UUID.randomUUID() + "-" + fileName;
+        // Crear archivo temporal
+        Path tempFile = Files.createTempFile("download-", "-" + fileName);
 
-            // Crear archivo temporal
-            Path tempFile = Files.createTempFile("download-", "-" + fileName);
-
-            // Descargar completamente la imagen
-            try (InputStream in = url.openStream()) {
-                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            // Subir a S3
-            PutObjectRequest request = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    .acl("public-read") // hace que sea accesible sin firma
-                    .build();
-
-            s3Client.putObject(request, RequestBody.fromFile(tempFile));
-
-            // Eliminar archivo temporal
-            Files.deleteIfExists(tempFile);
-
-            s3Urls.add("https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key);
+        // Descargar completamente la imagen
+        try (InputStream in = url.openStream()) {
+            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
-        return s3Urls;
-        
+
+        // Subir a S3
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .acl("public-read") // hace que sea accesible sin firma
+                .build();
+
+        s3Client.putObject(request, RequestBody.fromFile(tempFile));
+
+        // Eliminar archivo temporal
+        Files.deleteIfExists(tempFile);
+
+        return "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
     }
 }
