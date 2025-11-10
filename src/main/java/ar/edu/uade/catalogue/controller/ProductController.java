@@ -106,7 +106,7 @@ public class ProductController {
         return new ResponseEntity<>(csv, headers, HttpStatus.OK);
     }
 
-    @PatchMapping(value="/z", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
+    @PatchMapping(value="/update", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Product>patchProduct(@RequestBody ProductPatchDTO patch){
         try {
             Product productUpdated = productService.patchProduct(patch);
