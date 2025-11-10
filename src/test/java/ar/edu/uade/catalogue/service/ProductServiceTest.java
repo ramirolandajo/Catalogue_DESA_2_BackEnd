@@ -78,8 +78,8 @@ class ProductServiceTest {
         existing.setActive(true);
 
         // --- Mockeo flexible para servicios reutilizados ---
-        lenient().when(s3ImageService.fromUrlToS3(anyString()))
-                .thenReturn("https://s3.aws.com/file.jpg");
+        lenient().when(s3ImageService.fromUrlToS3(List.of(anyString())))
+                .thenReturn(List.of("https://s3.aws.com/file.jpg"));
 
         lenient().when(categoryService.geCategoriesForProductByCodes(anyList()))
                 .thenReturn(List.of(cat1, cat2));
