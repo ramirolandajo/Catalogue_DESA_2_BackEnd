@@ -1,6 +1,7 @@
 package ar.edu.uade.catalogue.model;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -34,7 +35,11 @@ public class Event {
     @Lob
     private String payload;
 
+    @Column(name = "timestamp")
     private LocalDateTime timestamp;
+
+    @Column(name = "origin")
+    private String originModule;
 
     public Event(String type, String payload){
         this.type = type;

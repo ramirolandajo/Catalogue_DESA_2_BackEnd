@@ -2,7 +2,6 @@ package ar.edu.uade.catalogue.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -13,11 +12,14 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 @Service
 public class S3ImageService {
+
     private final S3Client s3Client;
     private final String bucketName;
     private final String region;
@@ -31,31 +33,38 @@ public class S3ImageService {
         this.s3Client = S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey,secretKey)
+                        AwsBasicCredentials.create(accessKey, secretKey)
                 ))
-        .build();
+                .build();
     }
 
-    // Aca estan los dos metodos. Dependiendo del manejo que elijamos borrar el otro metodo
-
-    public String fromUrlToS3 (String sourceUrl) throws IOException {
+    public String fromUrlToS3(String sourceUrl) throws IOException {
         URL url = new URL(sourceUrl);
 
-        // Agarro el nombre del archivo de la url
-        String fileName = Paths.get(url.getPath()).getFileName().toString();
+        // Nombre del archivo
+        String fileName = Path.of(url.getPath()).getFileName().toString();
         String key = "products/" + UUID.randomUUID() + "-" + fileName;
 
-        try (InputStream inputStream = url.openStream()) {
-            PutObjectRequest request = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(key)
-                    // Hago la URL publica para que no tenga que estar firmada ni tenga tiempo de vida
-                    .acl("public-read")
-                    .build();
+        // Crear archivo temporal
+        Path tempFile = Files.createTempFile("download-", "-" + fileName);
 
-            s3Client.putObject(request, RequestBody.fromInputStream(inputStream, inputStream.available()));
+        // Descargar completamente la imagen
+        try (InputStream in = url.openStream()) {
+            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
 
-        return "https://" + bucketName + ".s3.amazonaws.com/" + key;
+        // Subir a S3
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .acl("public-read") // hace que sea accesible sin firma
+                .build();
+
+        s3Client.putObject(request, RequestBody.fromFile(tempFile));
+
+        // Eliminar archivo temporal
+        Files.deleteIfExists(tempFile);
+
+        return "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
     }
 }
