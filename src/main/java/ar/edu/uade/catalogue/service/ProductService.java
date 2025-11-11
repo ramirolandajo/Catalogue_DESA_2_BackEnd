@@ -619,7 +619,7 @@ public class ProductService {
         }
     }
 
-    public Product patchProduct(ProductPatchDTO patch) {
+    public Product patchProduct(ProductPatchDTO patch) throws IOException {
         if (patch.getProductCode() == null) {
             throw new EmptyResultDataAccessException("productCode es requerido para PATCH", 1);
         }
@@ -649,7 +649,7 @@ public class ProductService {
             product.setBrand(b);
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
-        if (patch.getImages() != null) product.setImages(patch.getImages());
+        if (patch.getImages() != null) product.setImages(urlToS3(patch.getImages()));
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
         if (patch.getIsBestSeller() != null) product.setBestSeller(patch.getIsBestSeller());
         if (patch.getIsFeatured() != null) product.setFeatured(patch.getIsFeatured());
