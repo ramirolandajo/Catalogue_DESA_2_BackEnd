@@ -83,6 +83,9 @@ public class ProductService {
         // Calcular precio con descuento correctamente
         float priceWithDiscount = computePrice(productDTO.getUnitPrice(), productDTO.getDiscount());
 
+        // Prueba sebas
+        List<String> imagesToSave = urlToS3(productDTO.getImages());
+
         Product productToSave = new Product();
         productToSave.setProductCode(productDTO.getProductCode());
         productToSave.setName(productDTO.getName());
@@ -94,7 +97,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(urlToS3(productDTO.getImages()));
+        productToSave.setImages(imagesToSave);
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
