@@ -75,7 +75,7 @@ public class Product {
    
     @ElementCollection
     @CollectionTable(name = "product_images", joinColumns = @JoinColumn(name = "product_id"))
-    @Column(name = "image_url", length = 2048)
+    @Column(name = "image_url", columnDefinition="TEXT")
     private List<String> images; //Solo links a las img
 
     @Column(name="isNew")

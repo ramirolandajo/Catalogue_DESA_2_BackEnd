@@ -247,20 +247,14 @@ public class ProductService {
             return new BatchResult(false, 0, 0, List.of(new BatchError(1, "Contenido CSV vacío")));
         }
         String normalized = normalizeCsvContent(content);
-        char[] seps = new char[]{',',';','\t'};
-        BatchResult lastError = null;
-        for (char sep : seps) {
-            try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
-                    .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
-                    .build()) {
-                BatchResult result = parseCsv(r);
-                if (result.success()) return result;
-                lastError = result; // guardar detalle del intento
-            } catch (Exception e) {
-                lastError = new BatchResult(false, 0, 0, List.of(new BatchError(-1, e.getMessage() == null ? "Error de parseo" : e.getMessage())));
-            }
+        // Forzamos el uso de punto y coma como delimitador
+        try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
+                .withCSVParser(new CSVParserBuilder().withSeparator(';').build())
+                .build()) {
+            return parseCsv(r);
+        } catch (Exception e) {
+            return new BatchResult(false, 0, 0, List.of(new BatchError(-1, e.getMessage() == null ? "Error de parseo con punto y coma" : e.getMessage())));
         }
-        return lastError == null ? new BatchResult(false, 0, 0, List.of(new BatchError(-1, "No se pudo parsear CSV con coma, punto y coma o tab"))) : lastError;
     }
 
     // Reutilizable: parsea CSV y si no hay errores, guarda los productos (all-or-nothing). Si hay errores, devuelve detalle sin guardar.
