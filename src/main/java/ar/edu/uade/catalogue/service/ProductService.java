@@ -1,11 +1,10 @@
 package ar.edu.uade.catalogue.service;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,11 +14,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVParserBuilder;
@@ -57,6 +61,8 @@ public class ProductService {
     @Autowired
     S3ImageService s3ImageService;
 
+    private static final Pattern NAME_ALLOWED = Pattern.compile(".*[A-Za-zÁÉÍÓÚáéíóúÑñ].*");
+
     public List<Product>getProducts(){
         return productRepository.findAll();
     }
@@ -67,7 +73,52 @@ public class ProductService {
     }
 
     public Product createProduct(ProductDTO productDTO) throws IOException {
+        validateProductDTOForCreate(productDTO);
         return saveProduct(productDTO, false);
+    }
+
+    private void validateProductDTOForCreate(ProductDTO dto) {
+        if (dto == null) throw new IllegalArgumentException("Body requerido");
+        if (dto.getProductCode() == null) throw new IllegalArgumentException("productCode es obligatorio");
+        if (productRepository.findByProductCode(dto.getProductCode()).isPresent()) {
+            throw new IllegalArgumentException("productCode ya existe: " + dto.getProductCode());
+        }
+        validateCommon(dto);
+    }
+
+    private void validateCommon(ProductDTO dto) {
+        if (dto.getName() == null || dto.getName().isBlank()) throw new IllegalArgumentException("El nombre no puede ser vacío");
+        if (!NAME_ALLOWED.matcher(dto.getName()).matches()) throw new IllegalArgumentException("El nombre debe contener al menos una letra");
+        if (dto.getDescription() == null || dto.getDescription().isBlank()) throw new IllegalArgumentException("La descripción no puede ser vacía");
+        if (dto.getUnitPrice() < 0) throw new IllegalArgumentException("El precio no puede ser negativo");
+        if (dto.getStock() < 0) throw new IllegalArgumentException("El stock no puede ser negativo");
+        if (dto.getDiscount() < 0) throw new IllegalArgumentException("El descuento no puede ser negativo");
+        float normalized = normalizeDiscount(dto.getDiscount());
+        if (normalized < 0f || normalized >= 1f) throw new IllegalArgumentException("El descuento debe estar entre 0 y 1 (ej: 0.2 = 20%)");
+
+        // Validar categorías/marca existentes si se informan
+        if (dto.getCategoryCodes() != null && !dto.getCategoryCodes().isEmpty()) {
+            List<Category> cats = categoryService.geCategoriesForProductByCodes(dto.getCategoryCodes());
+            if (cats.size() != dto.getCategoryCodes().size()) throw new IllegalArgumentException("Alguna categoría no existe por code");
+        } else if (dto.getCategories() != null && !dto.getCategories().isEmpty()) {
+            List<Category> cats = categoryService.geCategoriesForProductByID(dto.getCategories());
+            if (cats.size() != dto.getCategories().size()) throw new IllegalArgumentException("Alguna categoría no existe por id");
+        }
+        if (dto.getBrandCode() != null) {
+            if (brandService.getBrandByCode(dto.getBrandCode()) == null) throw new IllegalArgumentException("La marca no existe (brandCode)");
+        } else if (dto.getBrand() != null) {
+            if (brandService.getBrandByID(dto.getBrand()) == null) throw new IllegalArgumentException("La marca no existe (id)");
+        }
+        // Validar imágenes: URLs y extensiones soportadas
+        if (dto.getImages() != null) {
+            for (String u : dto.getImages()) {
+                if (u == null || u.isBlank()) throw new IllegalArgumentException("URL de imagen vacío");
+                // Validación básica: debe parecer URL http(s)
+                if (!(u.startsWith("http://") || u.startsWith("https://"))) {
+                    throw new IllegalArgumentException("URL de imagen inválida: " + u);
+                }
+            }
+        }
     }
 
     private Product saveProduct(ProductDTO productDTO, boolean suppressEvents) throws IOException {
@@ -83,7 +134,7 @@ public class ProductService {
         // Calcular precio con descuento correctamente
         float priceWithDiscount = computePrice(productDTO.getUnitPrice(), productDTO.getDiscount());
 
-        // Prueba sebas
+        // Subir a S3 y reemplazar URLs
         List<String> imagesToSave = urlToS3(productDTO.getImages());
 
         Product productToSave = new Product();
@@ -128,36 +179,37 @@ public class ProductService {
 
     public List<String>urlToS3(List<String>images) throws IOException{
         List<String> s3Images = new ArrayList<>();
-
+        if (images == null) return s3Images;
         for (String url : images) {
             s3Images.add(s3ImageService.fromUrlToS3(url));
         }
         return s3Images;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
-        // Leemos todo el contenido para poder intentar con múltiples separadores y normalizaciones
         String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
         return loadBatchFromString(content);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public boolean loadBatchFromReader(Reader reader) throws Exception {
         try (CSVReader r = new CSVReader(reader)) {
             return loadBatchFromReaderInternal(r);
         }
     }
 
-    public boolean loadBatchFromString(String content) throws Exception {
+    @Transactional(rollbackFor = Exception.class)
+    public boolean loadBatchFromString(String content) {
         if (content == null || content.isBlank()) return false;
         String normalized = normalizeCsvContent(content);
-        // Intentar distintos separadores: coma, punto y coma, tab
         char[] seps = new char[]{',',';','\t'};
         for (char sep : seps) {
             try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
                     .build()) {
                 boolean ok = loadBatchFromReaderInternal(r);
-                if (ok) return true; // éxito con este separador
+                if (ok) return true;
             } catch (Exception e) {
                 // intentar siguiente separador
             }
@@ -169,18 +221,14 @@ public class ProductService {
         String s = content;
         if (s == null) return "";
         s = s.trim();
-        // Remover BOM UTF-8 si existe
         if (!s.isEmpty() && s.charAt(0) == '\uFEFF') {
             s = s.substring(1);
         }
-        // Caso: archivo entero viene entrecomillado => des-encerrar y des-escapar ""
         if (s.length() >= 2 && s.charAt(0) == '"' && s.charAt(s.length()-1) == '"') {
             s = s.substring(1, s.length()-1);
-            s = s.replace("\"\"", "\""); // "" -> "
+            s = s.replace("\"\"", "\"");
         }
-        // Normalizar saltos de línea a \n
         s = s.replace("\r\n", "\n").replace('\r', '\n');
-        // Si todo viene en una sola línea pero parece tener encabezado + datos pegados
         if (!s.contains("\n")) {
             String[] headerHints = new String[]{"productCode,","product_code,","codigo,","código,","name,","nombre,"};
             String sLower = s.toLowerCase();
@@ -196,15 +244,12 @@ public class ProductService {
                         int pos = idx + token.length() + 1;
                         if (pos < s.length() && Character.isDigit(s.charAt(pos))) {
                             s = s.substring(0, pos).trim() + "\n" + s.substring(pos).trim();
-                            sLower = s.toLowerCase();
                             break;
                         }
                     }
                 }
             }
         }
-        // Pase adicional SIEMPRE: separar múltiples registros en una misma línea
-        // Regla 1 (regex): (inicio|espacio|coma)(bool) + espacio + (digitos,)
         {
             java.util.regex.Pattern p = java.util.regex.Pattern.compile("(^|[\\s,])(true|false|1|0|yes|no|si|sí)\\s+(\\d+,)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE | java.util.regex.Pattern.MULTILINE);
             java.util.regex.Matcher m = p.matcher(s);
@@ -219,12 +264,12 @@ public class ProductService {
         return s;
     }
 
+    // remove @Transactional here to avoid proxy constraint on private method
     private boolean loadBatchFromReaderInternal(CSVReader r) throws Exception {
         List<ProductDTO> items = new ArrayList<>();
         String[] header = r.readNext();
         if (header == null) return false;
 
-        // Detección de encabezados (ampliada a español y variantes)
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < header.length; i++) {
             if (header[i] == null) continue;
@@ -233,20 +278,13 @@ public class ProductService {
         int headerLen = header.length;
 
         Set<String> headerKeys = new HashSet<>(List.of(
-            // códigos
             "productcode","product_code","codigo","código","codigo_producto","código_producto","code",
-            // nombre y descripción
             "name","nombre","description","descripcion","descripción",
-            // precios y descuento
             "unitprice","unit_price","precio","precio_unitario","discount","descuento",
-            // stock
             "stock",
-            // categorías y marca por códigos
-            "categorycodes","category_codes","codigos_categorias","códigos_categorias","categoria_codigos",
+            "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos",
             "brandcode","brand_code","codigo_marca","código_marca",
-            // legacy ids
             "categories","categorias","marca","brand",
-            // otros
             "calification","rating","calificacion","calificación",
             "images","imagenes","imágenes",
             "new","isnew","nuevo","es_nuevo",
@@ -258,65 +296,68 @@ public class ProductService {
         boolean hasHeader = idx.keySet().stream().anyMatch(headerKeys::contains);
 
         if (!hasHeader) {
-            // No hay encabezado, tratar la primera fila como datos legacy y seguir parsing posicional
             parseLegacyRow(items, header, 1);
         }
 
         String[] row;
-        int line = hasHeader ? 1 : 2; // ya consumimos una línea como header o como primera data
+        int line = hasHeader ? 1 : 2;
+
+        List<BatchError> errors = new ArrayList<>();
 
         while ((row = r.readNext()) != null) {
             line++;
             try {
+                ProductDTO dto;
                 if (hasHeader) {
                     if (row.length > headerLen) {
-                        // Dividir en chunks de tamaño headerLen
                         for (int start = 0; start + headerLen <= row.length; start += headerLen) {
                             String[] chunk = Arrays.copyOfRange(row, start, start + headerLen);
-                            ProductDTO dto = parseByHeader(idx, chunk);
-                            if (dto != null) items.add(dto);
+                            dto = parseByHeader(idx, chunk);
+                            if (dto != null) {
+                                validateProductDTOForCreate(dto);
+                                items.add(dto);
+                            }
                         }
-                        // Si sobran columnas incompletas, las ignoramos
                     } else {
-                        ProductDTO dto = parseByHeader(idx, row);
-                        if (dto != null) items.add(dto);
+                        dto = parseByHeader(idx, row);
+                        // removed redundant null check as parseByHeader throws on missing required
+                        validateProductDTOForCreate(dto);
+                        items.add(dto);
                     }
                 } else {
                     parseLegacyRow(items, row, line);
                 }
             } catch (Exception e) {
-                System.out.println("Error en línea " + line + ": " + java.util.Arrays.toString(row) + " -> " + e.getMessage());
+                errors.add(new BatchError(line, e.getMessage() == null ? "Fila inválida" : e.getMessage()));
             }
         }
 
-        // Diagnóstico: listar cuántos items y sus productCode
-        try {
-            java.util.List<Integer> codes = items.stream().map(ProductDTO::getProductCode).filter(java.util.Objects::nonNull).toList();
-            System.out.println("[BatchCSV] Filas parseadas=" + items.size() + ", productCodes=" + codes);
-        } catch (Exception ignore) {}
+        // Duplicados dentro del CSV
+        Set<Integer> seen = new HashSet<>();
+        for (ProductDTO dto : items) {
+            Integer code = dto.getProductCode();
+            if (code != null && !seen.add(code)) {
+                errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
+            }
+        }
 
-        // Crear productos sin emitir eventos individuales; acumular para batch
+        if (!errors.isEmpty()) {
+            throw new IllegalArgumentException("Errores en CSV: " + errors.size());
+        }
+
         List<Product> created = new ArrayList<>();
         for (ProductDTO p : items) {
-            try {
-                Product saved = saveProduct(p, true);
-                if (saved != null) created.add(saved);
-            } catch (Exception ex) {
-                System.out.println("Error creando productoCode=" + p.getProductCode() + ": " + ex.getMessage());
-            }
+            Product saved = saveProduct(p, true);
+            created.add(saved);
         }
-        // Emitir evento batch con todos los productos creados exitosamente
         if (!created.isEmpty()) {
             inventoryEventPublisher.emitAgregarProductosBatch(created);
         }
-        // Éxito si al menos un producto fue creado
         return !created.isEmpty();
     }
 
-    // Helpers de CSV
     private ProductDTO parseByHeader(Map<String, Integer> idx, String[] row) {
         ProductDTO dto = new ProductDTO();
-        // Requeridos mínimos
         dto.setProductCode(getInt(idx, row, "productcode", "product_code", "codigo", "código", "codigo_producto", "código_producto", "code"));
         dto.setName(getStr(idx, row, "name", "nombre"));
         dto.setDescription(getStr(idx, row, "description", "descripcion", "descripción"));
@@ -325,17 +366,14 @@ public class ProductService {
         Integer stockVal = getInt(idx, row, "stock");
         dto.setStock(stockVal != null ? stockVal : 0);
 
-        // Códigos prioritarios
         dto.setCategoryCodes(getIntList(idx, row, ";", "categorycodes", "category_codes", "codigos_categorias", "códigos_categorías", "categoria_codigos"));
         Integer brandCode = getIntNullable(idx, row, "brandcode", "brand_code", "codigo_marca", "código_marca");
         if (brandCode != null) dto.setBrandCode(brandCode);
 
-        // Compatibilidad legacy
         dto.setCategories(getIntList(idx, row, ";", "categories", "categorias"));
         Integer brandId = getIntNullable(idx, row, "brand", "marca");
         if (brandId != null) dto.setBrand(brandId);
 
-        // Resto
         dto.setCalification(getFloat(idx, row, "calification", "rating", "calificacion", "calificación"));
         dto.setImages(getStrList(idx, row, ";", "images", "imagenes", "imágenes"));
         dto.setNew(getBool(idx, row, "new", "isnew", "nuevo", "es_nuevo"));
@@ -344,16 +382,13 @@ public class ProductService {
         dto.setHero(getBool(idx, row, "hero"));
         dto.setActive(getBool(idx, row, "active", "enabled", "activo", "habilitado"));
 
-        // Validación básica
-        if (dto.getProductCode() == null || dto.getName() == null) return null;
+        if (dto.getProductCode() == null || dto.getName() == null) throw new IllegalArgumentException("productCode y name son requeridos");
         return dto;
     }
 
     private void parseLegacyRow(List<ProductDTO> items, String[] row, int line) {
-        // Formato anterior de 15 columnas
         if (row.length < 15) {
-            System.out.println("Fila legacy inválida en línea " + line + ": columnas=" + row.length);
-            return;
+            throw new IllegalArgumentException("Fila legacy inválida en línea " + line + ": columnas=" + row.length);
         }
         try {
             ProductDTO dto = new ProductDTO();
@@ -381,13 +416,13 @@ public class ProductService {
             dto.setFeatured(parseBoolSafe(row[12]));
             dto.setHero(parseBoolSafe(row[13]));
             dto.setActive(parseBoolSafe(row[14]));
+            validateProductDTOForCreate(dto);
             items.add(dto);
         } catch (Exception e) {
-            System.out.println("Error legacy en línea " + line + ": " + java.util.Arrays.toString(row));
+            throw new IllegalArgumentException("Error legacy en línea " + line + ": " + java.util.Arrays.toString(row));
         }
     }
 
-    // Utilidades de parseo por header
     private Integer col(Map<String, Integer> idx, String... keys) {
         for (String k : keys) {
             Integer i = idx.get(k.toLowerCase());
@@ -434,7 +469,6 @@ public class ProductService {
     private float parseFloatSafe(String s) {
         if (s == null) return 0f;
         String norm = s.trim().replace("%", "");
-        // Soportar comas decimales
         norm = norm.replace(',', '.');
         try { return Float.parseFloat(norm); } catch (Exception e) { return 0f; }
     }
@@ -445,6 +479,15 @@ public class ProductService {
     }
 
     public Product updateProduct(ProductDTO productUpdateDTO) throws IOException {
+        if (productUpdateDTO == null || productUpdateDTO.getProductCode() == null) {
+            throw new IllegalArgumentException("productCode es obligatorio para actualizar");
+        }
+        // Si quiere cambiar el productCode, no se permite colisión
+        Optional<Product> existing = productRepository.findByProductCode(productUpdateDTO.getProductCode());
+        Product productToUpdate = existing.orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productUpdateDTO.getProductCode(), 1));
+
+        validateCommon(productUpdateDTO);
+
         List<Category>categoriesToUpdate = (productUpdateDTO.getCategoryCodes() != null && !productUpdateDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productUpdateDTO.getCategoryCodes())
                 : categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
@@ -452,16 +495,12 @@ public class ProductService {
                 ? brandService.getBrandByCode(productUpdateDTO.getBrandCode())
                 : brandService.getBrandByID(productUpdateDTO.getBrand());
 
-        Product productToUpdate = productRepository.findByProductCode(productUpdateDTO.getProductCode())
-            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productUpdateDTO.getProductCode(), 1));
-
         boolean wasActive = productToUpdate.isActive();
 
         productToUpdate.setName(productUpdateDTO.getName());
         productToUpdate.setDescription(productUpdateDTO.getDescription());
         productToUpdate.setUnitPrice(productUpdateDTO.getUnitPrice());
         productToUpdate.setDiscount(productUpdateDTO.getDiscount());
-        // Recalcular price derivado
         productToUpdate.setPrice(computePrice(productToUpdate.getUnitPrice(), productToUpdate.getDiscount()));
         productToUpdate.setStock(productUpdateDTO.getStock());
         productToUpdate.setCategories(categoriesToUpdate);
@@ -482,7 +521,6 @@ public class ProductService {
         }
         inventoryEventPublisher.emitProductoActualizado(saved);
 
-        // Evento requerido: payload con códigos
         var payload = buildProductModificationPayload(saved);
         kafkaMockService.sendEvent("PATCH: modificar un producto", payload);
 
@@ -496,15 +534,12 @@ public class ProductService {
         map.put("description", p.getDescription());
         map.put("discount", p.getDiscount());
         map.put("stock", p.getStock());
-        // Códigos de categorías prioritarios
         List<Integer> categoryCodes = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getCategoryCode).toList();
         List<Integer> categoryIds = p.getCategories() == null ? List.of() : p.getCategories().stream().map(Category::getId).toList();
-        map.put("categories", categoryCodes); // nuevo contrato
-        map.put("categoryIds", categoryIds);  // compat
-        // Marca por código prioritario
+        map.put("categories", categoryCodes);
+        map.put("categoryIds", categoryIds);
         Integer brandCode = p.getBrand() == null ? null : p.getBrand().getBrandCode();
-        Integer brandId = p.getBrand() == null ? null : p.getBrand().getId();
-        map.put("brand", brandCode);    // nuevo contrato
+        map.put("brand", brandCode);
         map.put("calification", p.getCalification());
         map.put("images", p.getImages() == null ? List.of() : new java.util.ArrayList<>(p.getImages()));
         map.put("new", p.isNew());
@@ -512,7 +547,6 @@ public class ProductService {
         map.put("featured", p.isFeatured());
         map.put("hero", p.isHero());
         map.put("active", p.isActive());
-        // precios
         map.put("unitPrice", p.getUnitPrice());
         map.put("unit_price", p.getUnitPrice());
         map.put("price", p.getPrice());
@@ -524,11 +558,11 @@ public class ProductService {
             .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         int newStock = productToUpdate.getStock() - amountBought;
+        if (newStock < 0) throw new IllegalArgumentException("Stock no puede ser negativo");
         productToUpdate.setStock(newStock);
 
         productRepository.save(productToUpdate);
 
-        // Emitir y persistir SOLO el evento PUT: Actualizar stock
         inventoryEventPublisher.emitActualizarStock(productToUpdate);
         kafkaMockService.sendEvent("PUT: Actualizar stock", productToUpdate);
 
@@ -540,18 +574,17 @@ public class ProductService {
             .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         int newStock = productToUpdate.getStock() + amountReturned;
-
         productToUpdate.setStock(newStock);
 
         productRepository.save(productToUpdate);
 
-        // Emitir y persistir SOLO el evento PUT: Actualizar stock
         inventoryEventPublisher.emitActualizarStock(productToUpdate);
         kafkaMockService.sendEvent("PUT: Actualizar stock", productToUpdate);
 
         return  productToUpdate;
     }
     public Product updateStock (Integer productCode, int newStock){
+        if (newStock < 0) throw new IllegalArgumentException("Stock no puede ser negativo");
         Product productToUpdate = productRepository.findByProductCode(productCode)
             .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
@@ -559,7 +592,6 @@ public class ProductService {
 
         productRepository.save(productToUpdate);
 
-        // Emitir y persistir SOLO el evento PUT: Actualizar stock
         inventoryEventPublisher.emitActualizarStock(productToUpdate);
         kafkaMockService.sendEvent("PUT: Actualizar stock", productToUpdate);
 
@@ -567,6 +599,7 @@ public class ProductService {
     }
 
     public Product updateUnitPrice (Integer productCode, float newPrice){
+        if (newPrice < 0) throw new IllegalArgumentException("El precio no puede ser negativo");
         Product productToUpdate = productRepository.findByProductCode(productCode)
             .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
@@ -579,13 +612,14 @@ public class ProductService {
         Event eventSent = kafkaMockService.sendEvent("PATCH: Precio unitario actualizado", productToUpdate);
         System.out.println(eventSent.toString());
         inventoryEventPublisher.emitProductoActualizado(productToUpdate);
-        // Persistimos también el evento emitido al middleware
         kafkaMockService.sendEvent("PUT: Producto actualizado", productToUpdate);
 
         return productRepository.save(productToUpdate);
     }
     
     public Product updateDiscount(Integer productCode, float newDiscount){
+        float normalized = normalizeDiscount(newDiscount);
+        if (normalized < 0f || normalized >= 1f) throw new IllegalArgumentException("El descuento debe estar entre 0 y 1");
         Product productToUpdate = productRepository.findByProductCode(productCode)
             .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
@@ -598,7 +632,6 @@ public class ProductService {
         Event eventSent = kafkaMockService.sendEvent("PATCH: Descuento actualizado", productToUpdate);
         System.out.println(eventSent.toString());
         inventoryEventPublisher.emitProductoActualizado(productToUpdate);
-        // Persistimos también el evento emitido al middleware
         kafkaMockService.sendEvent("PUT: Producto actualizado", productToUpdate);
 
        return productRepository.save(productToUpdate);
@@ -632,27 +665,53 @@ public class ProductService {
         boolean wasActive = product.isActive();
         boolean priceRelatedChanged = false;
 
-        if (patch.getName() != null) product.setName(patch.getName());
-        if (patch.getDescription() != null) product.setDescription(patch.getDescription());
-        if (patch.getUnitPrice() != null) { product.setUnitPrice(patch.getUnitPrice()); priceRelatedChanged = true; }
-        if (patch.getDiscount() != null) { product.setDiscount(patch.getDiscount()); priceRelatedChanged = true; }
-        if (patch.getStock() != null) product.setStock(patch.getStock());
+        if (patch.getName() != null) {
+            if (patch.getName().isBlank() || !NAME_ALLOWED.matcher(patch.getName()).matches()) {
+                throw new IllegalArgumentException("Nombre inválido (no vacío y con letras)");
+            }
+            product.setName(patch.getName());
+        }
+        if (patch.getDescription() != null) {
+            if (patch.getDescription().isBlank()) throw new IllegalArgumentException("Descripción no puede ser vacía");
+            product.setDescription(patch.getDescription());
+        }
+        if (patch.getUnitPrice() != null) {
+            if (patch.getUnitPrice() < 0) throw new IllegalArgumentException("El precio no puede ser negativo");
+            product.setUnitPrice(patch.getUnitPrice()); priceRelatedChanged = true;
+        }
+        if (patch.getDiscount() != null) {
+            float n = normalizeDiscount(patch.getDiscount());
+            if (n < 0f || n >= 1f) throw new IllegalArgumentException("El descuento debe estar entre 0 y 1");
+            product.setDiscount(patch.getDiscount()); priceRelatedChanged = true;
+        }
+        if (patch.getStock() != null) {
+            if (patch.getStock() < 0) throw new IllegalArgumentException("Stock no puede ser negativo");
+            product.setStock(patch.getStock());
+        }
         if (patch.getCategoryCodes() != null) {
             List<Category> cats = categoryService.geCategoriesForProductByCodes(patch.getCategoryCodes());
+            if (cats.size() != patch.getCategoryCodes().size()) throw new IllegalArgumentException("Alguna categoría no existe por code");
             product.setCategories(cats);
         } else if (patch.getCategories() != null) {
             List<Category> cats = categoryService.geCategoriesForProductByID(patch.getCategories());
+            if (cats.size() != patch.getCategories().size()) throw new IllegalArgumentException("Alguna categoría no existe por id");
             product.setCategories(cats);
         }
         if (patch.getBrandCode() != null) {
             Brand b = brandService.getBrandByCode(patch.getBrandCode());
+            if (b == null) throw new IllegalArgumentException("Marca inexistente (brandCode)");
             product.setBrand(b);
         } else if (patch.getBrand() != null) {
             Brand b = brandService.getBrandByID(patch.getBrand());
+            if (b == null) throw new IllegalArgumentException("Marca inexistente (id)");
             product.setBrand(b);
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
-        if (patch.getImages() != null) product.setImages(urlToS3(patch.getImages()));
+        if (patch.getImages() != null) {
+            // Validar cada URL y subir
+            List<String> s3 = urlToS3(patch.getImages());
+            product.setImages(s3);
+        }
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
         if (patch.getIsBestSeller() != null) product.setBestSeller(patch.getIsBestSeller());
         if (patch.getIsFeatured() != null) product.setFeatured(patch.getIsFeatured());
@@ -688,7 +747,6 @@ public class ProductService {
         product.setActive(true);
         Product saved = productRepository.save(product);
 
-        // Notificar a Inventario y Middleware
         inventoryEventPublisher.emitProductoActivado(saved);
         var payload = buildProductModificationPayload(saved);
         kafkaMockService.sendEvent("PATCH: activar producto", payload);
@@ -796,5 +854,168 @@ public class ProductService {
         float price = unitPrice * (1.0f - d);
         // redondeo a 2 decimales
         return Math.round(price * 100.0f) / 100.0f;
+    }
+
+    // Utilidades Excel
+    private static double getNumeric(Row row, Map<String,Integer> idx, int r, String... keys) {
+        Double v = getNumericNullable(row, idx, keys);
+        if (v == null) throw new IllegalArgumentException("Campo numérico requerido vacío en fila " + (r+1));
+        return v;
+    }
+    private static double getNumericOptional(Row row, Map<String,Integer> idx, int r, double def, String... keys) {
+        Double v = getNumericNullable(row, idx, keys);
+        return v == null ? def : v;
+    }
+    private static Double getNumericNullable(Row row, Map<String,Integer> idx, String... keys) {
+        Integer c = first(idx, keys);
+        if (c == null) return null;
+        Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+        if (cell == null) return null;
+        return switch (cell.getCellType()) {
+            case NUMERIC -> cell.getNumericCellValue();
+            case STRING -> {
+                String s = cell.getStringCellValue();
+                if (s == null || s.isBlank()) yield null;
+                s = s.replace('%', ' ').trim().replace(',', '.');
+                try { yield Double.parseDouble(s); } catch (Exception e) { throw new IllegalArgumentException("Valor numérico inválido en columna " + (c+1)); }
+            }
+            case BOOLEAN -> cell.getBooleanCellValue() ? 1.0 : 0.0;
+            default -> null;
+        };
+    }
+    private static String getString(Row row, Map<String,Integer> idx, int r, String... keys) {
+        Integer c = first(idx, keys);
+        if (c == null) return null;
+        Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+        if (cell == null) return null;
+        String s = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : (cell.getCellType()==CellType.NUMERIC ? String.valueOf((long)cell.getNumericCellValue()) : cell.toString());
+        return s != null ? s.trim() : null;
+    }
+    private static boolean getBoolExcel(Row row, Map<String,Integer> idx, String... keys) {
+        Integer c = first(idx, keys);
+        if (c == null) return false;
+        Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+        if (cell == null) return false;
+        return switch (cell.getCellType()) {
+            case BOOLEAN -> cell.getBooleanCellValue();
+            case NUMERIC -> cell.getNumericCellValue() != 0.0;
+            case STRING -> {
+                String v = cell.getStringCellValue();
+                yield v != null && v.matches("(?i)true|1|yes|y|si|sí");
+            }
+            default -> false;
+        };
+    }
+    private static List<Integer> getIntListExcel(Row row, Map<String,Integer> idx, String... keys) {
+        List<String> parts = splitListExcel(row, idx, keys);
+        List<Integer> out = new ArrayList<>();
+        for (String p : parts) {
+            try { out.add(Integer.parseInt(p)); } catch (Exception e) { throw new IllegalArgumentException("Valor no numérico en lista: " + p); }
+        }
+        return out;
+    }
+    private static List<String> splitListExcel(Row row, Map<String,Integer> idx, String... keys) {
+        Integer c = first(idx, keys);
+        if (c == null) return List.of();
+        Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+        if (cell == null) return List.of();
+        String s = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
+        if (s == null || s.isBlank()) return List.of();
+        return Arrays.stream(s.split(";"))
+                .map(String::trim)
+                .filter(t -> !t.isBlank())
+                .collect(Collectors.toList());
+    }
+    private static Integer first(Map<String,Integer> idx, String... keys) {
+        for (String k : keys) { Integer i = idx.get(k.toLowerCase()); if (i != null) return i; }
+        return null;
+    }
+
+    // Estructuras de resultado batch
+    public record BatchError(int line, String message) {}
+    public record BatchResult(boolean success, int totalRows, int created, List<BatchError> errors) {}
+
+    @Transactional(rollbackFor = Exception.class)
+    public BatchResult loadBatchFromExcel(MultipartFile file) throws Exception {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Archivo Excel vacío");
+        String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        try (InputStream is = file.getInputStream()) {
+            Workbook wb;
+            if (name.endsWith(".xlsx")) wb = new XSSFWorkbook(is);
+            else if (name.endsWith(".xls")) wb = new HSSFWorkbook(is);
+            else throw new IllegalArgumentException("Formato no soportado (use .xlsx o .xls)");
+
+            Sheet sheet = wb.getSheetAt(0);
+            if (sheet == null) throw new IllegalArgumentException("Sin hoja 0 en Excel");
+
+            Map<String,Integer> idx = new HashMap<>();
+            Row header = sheet.getRow(0);
+            if (header == null) throw new IllegalArgumentException("Excel sin encabezado");
+            for (int c=0; c<header.getLastCellNum(); c++) {
+                Cell cell = header.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                if (cell == null) continue;
+                String key = cell.getStringCellValue();
+                if (key != null) idx.put(key.trim().toLowerCase(), c);
+            }
+
+            List<ProductDTO> items = new ArrayList<>();
+            List<BatchError> errors = new ArrayList<>();
+
+            for (int r=1; r<=sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+                try {
+                    ProductDTO dto = new ProductDTO();
+                    dto.setProductCode((int) getNumeric(row, idx, r, "productcode","product_code","codigo","código","codigo_producto","código_producto","code"));
+                    dto.setName(getString(row, idx, r, "name","nombre"));
+                    dto.setDescription(getString(row, idx, r, "description","descripcion","descripción"));
+                    dto.setUnitPrice((float) getNumeric(row, idx, r, "unitprice","unit_price","precio","precio_unitario"));
+                    dto.setDiscount((float) getNumericOptional(row, idx, r, 0.0, "discount","descuento"));
+                    dto.setStock((int) getNumericOptional(row, idx, r, 0.0, "stock"));
+                    dto.setCategoryCodes(getIntListExcel(row, idx, "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos"));
+                    Double bc = getNumericNullable(row, idx, "brandcode","brand_code","codigo_marca","código_marca");
+                    if (bc != null) dto.setBrandCode(bc.intValue());
+                    dto.setCategories(getIntListExcel(row, idx, "categories","categorias"));
+                    Double bid = getNumericNullable(row, idx, "brand","marca");
+                    if (bid != null) dto.setBrand(bid.intValue());
+                    Double cal = getNumericNullable(row, idx, "calification","rating","calificacion","calificación");
+                    if (cal != null) dto.setCalification(cal.floatValue());
+                    dto.setImages(splitListExcel(row, idx, "images","imagenes","imágenes"));
+                    dto.setNew(getBoolExcel(row, idx, "new","isnew","nuevo","es_nuevo"));
+                    dto.setBestSeller(getBoolExcel(row, idx, "bestseller","isbestseller","is_bestseller","mas_vendido","más_vendido"));
+                    dto.setFeatured(getBoolExcel(row, idx, "featured","isfeatured","is_featured","destacado"));
+                    dto.setHero(getBoolExcel(row, idx, "hero"));
+                    dto.setActive(getBoolExcel(row, idx, "active","enabled","activo","habilitado"));
+
+                    validateProductDTOForCreate(dto);
+                    items.add(dto);
+                } catch (Exception ex) {
+                    errors.add(new BatchError(r+1, ex.getMessage() == null ? "Fila inválida" : ex.getMessage()));
+                }
+            }
+
+            // Duplicados de productCode dentro del archivo
+            Set<Integer> seen = new HashSet<>();
+            for (ProductDTO dto : items) {
+                Integer code = dto.getProductCode();
+                if (code != null && !seen.add(code)) {
+                    errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
+                }
+            }
+
+            if (!errors.isEmpty()) {
+                return new BatchResult(false, items.size(), 0, errors);
+            }
+
+            List<Product> created = new ArrayList<>();
+            for (ProductDTO dto : items) {
+                Product saved = saveProduct(dto, true);
+                created.add(saved);
+            }
+            if (!created.isEmpty()) {
+                inventoryEventPublisher.emitAgregarProductosBatch(created);
+            }
+            return new BatchResult(true, items.size(), created.size(), List.of());
+        }
     }
 }

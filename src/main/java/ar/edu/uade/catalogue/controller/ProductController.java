@@ -6,7 +6,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -64,7 +66,9 @@ public class ProductController {
             Product productSaved = productService.createProduct(productDTO);
             return new ResponseEntity<>(productSaved,HttpStatus.CREATED);
         } catch (Exception e) {
-            return new ResponseEntity<>(e.getMessage(),HttpStatus.CONFLICT);
+            Map<String,Object> body = new HashMap<>();
+            body.put("error", e.getMessage());
+            return new ResponseEntity<>(body,HttpStatus.CONFLICT);
         }
     }
 
@@ -81,9 +85,9 @@ public class ProductController {
             String content = new String(csvBytes, StandardCharsets.UTF_8);
             succeeded = productService.loadBatchFromString(content);
         } else {
-            return new ResponseEntity<>("No se recibió archivo ni cuerpo CSV", HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>(Map.of("error","No se recibió archivo ni cuerpo CSV"), HttpStatus.BAD_REQUEST);
         }
-        return new ResponseEntity<>(succeeded ? "Batch cargado" : "Ocurrio un error", succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+        return new ResponseEntity<>(succeeded ? Map.of("message","Batch cargado") : Map.of("error","Ocurrió un error"), succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
     }
 
     // Alternativa: subir CSV como texto/raw (Insomnia/Postman) sin multipart (ruta dedicada)
@@ -91,7 +95,27 @@ public class ProductController {
     public ResponseEntity<?> loadBatchRaw(@RequestBody byte[] csvBytes) throws Exception {
         String content = new String(csvBytes, StandardCharsets.UTF_8);
         boolean succeeded = productService.loadBatchFromString(content);
-        return new ResponseEntity<>(succeeded ? "Batch cargado" : "Ocurrio un error", succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+        return new ResponseEntity<>(succeeded ? Map.of("message","Batch cargado") : Map.of("error","Ocurrió un error"), succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+    }
+
+    // Nuevo endpoint: subir Excel (.xlsx/.xls) con all-or-nothing y reporte de errores
+    @PostMapping(value = "/uploadExcel", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<?> uploadExcel(@RequestParam("file") MultipartFile excel) throws Exception {
+        var result = productService.loadBatchFromExcel(excel);
+        if (result.success()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "message", "Batch cargado",
+                "totalRows", result.totalRows(),
+                "created", result.created()
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "Batch rechazado por errores",
+                "totalRows", result.totalRows(),
+                "created", result.created(),
+                "errors", result.errors()
+            ));
+        }
     }
 
     // Nuevo: exportar todos los productos en CSV (mismo formato que import) y forzar descarga
@@ -102,7 +126,7 @@ public class ProductController {
         String filename = "products-" + ts + ".csv";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("text/csv"));
-        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"{}");
         headers.setContentLength(csv.length);
         return new ResponseEntity<>(csv, headers, HttpStatus.OK);
     }
@@ -175,7 +199,7 @@ public class ProductController {
         } catch (EmptyResultDataAccessException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         } catch (IllegalStateException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.CONFLICT);
+            return new ResponseEntity<>(Map.of("error", e.getMessage()), HttpStatus.CONFLICT);
         }
     }
 
