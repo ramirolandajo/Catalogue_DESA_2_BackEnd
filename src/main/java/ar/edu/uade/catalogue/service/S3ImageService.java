@@ -54,68 +54,72 @@ public class S3ImageService {
         if (sourceUrl == null || sourceUrl.isBlank()) {
             throw new IllegalArgumentException("URL de imagen vacío");
         }
-        URL url = new URL(sourceUrl);
 
-        // Validar content-type remoto si es posible
-        String contentType = null;
+        HttpURLConnection connection = null;
         try {
-            HttpURLConnection con = (HttpURLConnection) url.openConnection();
-            con.setRequestMethod("HEAD");
-            con.setRequestProperty("User-Agent", USER_AGENT); // Simular navegador
-            con.setConnectTimeout(8000);
-            con.setReadTimeout(8000);
-            contentType = con.getContentType();
-            con.disconnect();
-        } catch (Exception ignore) {}
+            URL url = new URL(sourceUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestProperty("User-Agent", USER_AGENT);
+            connection.setInstanceFollowRedirects(true); // Seguir redirecciones explícitamente
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
 
-        // Nombre del archivo
-        String fileName = Path.of(url.getPath()).getFileName().toString();
-        String ext = extractExt(fileName);
-        if (ext == null && contentType != null) {
-            if (MediaType.IMAGE_JPEG_VALUE.equalsIgnoreCase(contentType)) ext = "jpg";
-            else if (MediaType.IMAGE_PNG_VALUE.equalsIgnoreCase(contentType)) ext = "png";
-            else if ("image/webp".equalsIgnoreCase(contentType)) ext = "webp";
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new IOException("El servidor devolvió un estado no válido: " + responseCode + " para la URL: " + sourceUrl);
+            }
+
+            String contentType = connection.getContentType();
+            String mainContentType = (contentType != null) ? contentType.split(";")[0].trim().toLowerCase() : "";
+
+            String fileName = Path.of(url.getPath()).getFileName().toString();
+            String ext = extractExt(fileName);
+
+            if (ext == null || ext.isBlank()) {
+                if (MediaType.IMAGE_JPEG_VALUE.equalsIgnoreCase(mainContentType)) ext = "jpg";
+                else if (MediaType.IMAGE_PNG_VALUE.equalsIgnoreCase(mainContentType)) ext = "png";
+                else if ("image/webp".equalsIgnoreCase(mainContentType)) ext = "webp";
+            }
+
+            if (ext == null || !ALLOWED_EXT.contains(ext.toLowerCase())) {
+                throw new IllegalArgumentException("Formato de imagen no permitido o no reconocible para la URL: " + sourceUrl);
+            }
+            if (!ALLOWED_CT.contains(mainContentType)) {
+                throw new IllegalArgumentException("Content-Type de imagen no permitido: " + contentType);
+            }
+
+            String safeName = sanitize(fileName, ext);
+            String key = "products/" + UUID.randomUUID() + "-" + safeName;
+
+            Path tempFile = Files.createTempFile("download-", "-" + safeName);
+            try (InputStream in = connection.getInputStream()) {
+                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .acl("public-read")
+                    .contentType(toContentType(ext))
+                    .build();
+
+            s3Client.putObject(request, RequestBody.fromFile(tempFile));
+
+            Files.deleteIfExists(tempFile);
+
+            return "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
+
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
-        if (ext == null) {
-            throw new IllegalArgumentException("No se pudo determinar la extensión de la imagen para URL: " + sourceUrl);
-        }
-        if (!ALLOWED_EXT.contains(ext.toLowerCase())) {
-            throw new IllegalArgumentException("Formato de imagen no permitido (solo jpg/jpeg/png/webp): " + ext);
-        }
-        if (contentType != null && !ALLOWED_CT.contains(contentType.toLowerCase())) {
-            throw new IllegalArgumentException("Content-Type de imagen no permitido: " + contentType);
-        }
-
-        String safeName = sanitize(fileName, ext);
-        String key = "products/" + UUID.randomUUID() + "-" + safeName;
-
-        // Crear archivo temporal y descargar completamente la imagen
-        Path tempFile = Files.createTempFile("download-", "-" + safeName);
-        HttpURLConnection downloadCon = (HttpURLConnection) url.openConnection();
-        downloadCon.setRequestProperty("User-Agent", USER_AGENT); // Simular navegador
-        try (InputStream in = downloadCon.getInputStream()) {
-            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
-        }
-
-        // Subir a S3
-        PutObjectRequest request = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(key)
-                .acl("public-read")
-                .contentType(toContentType(ext))
-                .build();
-
-        s3Client.putObject(request, RequestBody.fromFile(tempFile));
-
-        Files.deleteIfExists(tempFile);
-
-        return "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
     }
 
     private static String extractExt(String fileName) {
         if (fileName == null) return null;
-        int dot = fileName.lastIndexOf('.')
-;        if (dot < 0) return null;
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0) return null;
         String ext = fileName.substring(dot + 1).toLowerCase();
         if (ext.contains("?")) ext = ext.substring(0, ext.indexOf('?'));
         if (ext.contains("#")) ext = ext.substring(0, ext.indexOf('#'));

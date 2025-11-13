@@ -422,26 +422,26 @@ public class ProductService {
 
     private ProductDTO parseByHeader(Map<String, Integer> idx, String[] row) {
         ProductDTO dto = new ProductDTO();
-        dto.setProductCode(getInt(idx, row, "productcode", "product_code", "codigo", "código", "codigo_producto", "código_producto", "code"));
+        dto.setProductCode(getInt(idx, row, "productcode", "product_code", "codigo_producto", "codigo", "código", "code"));
         dto.setName(getStr(idx, row, "name", "nombre"));
         dto.setDescription(getStr(idx, row, "description", "descripcion", "descripción"));
-        dto.setUnitPrice(getFloat(idx, row, "unitprice", "unit_price", "precio", "precio_unitario"));
+        dto.setUnitPrice(getFloat(idx, row, "unitprice", "unit_price", "preciounitario", "precio", "precio_unitario"));
         dto.setDiscount(getFloat(idx, row, "discount", "descuento"));
         Integer stockVal = getInt(idx, row, "stock");
         dto.setStock(stockVal != null ? stockVal : 0);
 
-        dto.setCategoryCodes(getIntList(idx, row, ";", "categorycodes", "category_codes", "codigos_categorias", "códigos_categorías", "categoria_codigos"));
-        Integer brandCode = getIntNullable(idx, row, "brandcode", "brand_code", "codigo_marca", "código_marca");
+        dto.setCategoryCodes(getIntList(idx, row, ";", "categorycodes", "category_codes", "codigosdecategoria", "codigos_categorias", "códigos_categorías", "categoria_codigos"));
+        Integer brandCode = getIntNullable(idx, row, "brandcode", "brand_code", "codigodemarca", "codigo_marca", "código_marca");
         if (brandCode != null) dto.setBrandCode(brandCode);
 
         dto.setCategories(getIntList(idx, row, ";", "categories", "categorias"));
         Integer brandId = getIntNullable(idx, row, "brand", "marca");
         if (brandId != null) dto.setBrand(brandId);
 
-        dto.setCalification(getFloat(idx, row, "calification", "rating", "calificacion", "calificación"));
-        dto.setImages(getStrList(idx, row, ";", "images", "imagenes", "imágenes"));
+        dto.setCalification(getFloat(idx, row, "calification", "calificacion", "rating", "calificación"));
+        dto.setImages(getStrList(idx, row, ";", "images", "imágenes", "imagenes"));
         dto.setNew(getBool(idx, row, "new", "isnew", "nuevo", "es_nuevo"));
-        dto.setBestSeller(getBool(idx, row, "bestseller", "isBestseller", "is_bestseller", "mas_vendido", "más_vendido"));
+        dto.setBestSeller(getBool(idx, row, "bestseller", "isbestseller", "is_bestseller", "mas_vendido", "más_vendido"));
         dto.setFeatured(getBool(idx, row, "featured", "isfeatured", "is_featured", "destacado"));
         dto.setHero(getBool(idx, row, "hero"));
         dto.setActive(getBool(idx, row, "active", "enabled", "activo", "habilitado"));
