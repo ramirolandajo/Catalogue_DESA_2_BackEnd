@@ -684,7 +684,7 @@ public class ProductService {
 
     public Product activateProduct(Integer productCode) {
         Product product = productRepository.findByProductCode(productCode)
-                .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
+            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         if (product.isActive()) {
             throw new IllegalStateException("El producto ya estaba activado");
@@ -701,7 +701,7 @@ public class ProductService {
 
     public Product addReview(Integer productCode, String message, Float rateUpdated) {
         Product product = productRepository.findByProductCode(productCode)
-                .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
+            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         if (message != null && !message.isBlank()) {
             java.util.ArrayList<ReviewEntry> list = product.getReviews() == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(product.getReviews());
@@ -714,13 +714,6 @@ public class ProductService {
         return productRepository.save(product);
     }
 
-    /**
-     * Exporta todos los productos a CSV usando el mismo formato de importación:
-     * Header: productCode,name,description,unitPrice,discount,stock,categoryCodes,brandCode,calification,images,new,bestSeller,featured,hero,active
-     * - Separador de columnas: coma
-     * - Listas (categorías, imágenes): separadas por ';'
-     * - Campos con coma, salto de línea o comillas: se envuelven en comillas dobles y se escapan comillas como "".
-     */
     public byte[] exportProductsCsv() {
         List<ar.edu.uade.catalogue.model.Product> products = getProducts();
         StringBuilder sb = new StringBuilder();
@@ -751,21 +744,21 @@ public class ProductService {
 
             // Escribir fila con escape CSV
             sb.append(csv(productCode))
-                    .append(',').append(csv(name))
-                    .append(',').append(csv(description))
-                    .append(',').append(csv(unitPrice))
-                    .append(',').append(csv(discount))
-                    .append(',').append(csv(stock))
-                    .append(',').append(csv(categoryCodes))
-                    .append(',').append(csv(brandCode))
-                    .append(',').append(csv(calification))
-                    .append(',').append(csv(images))
-                    .append(',').append(csv(isNew))
-                    .append(',').append(csv(bestSeller))
-                    .append(',').append(csv(featured))
-                    .append(',').append(csv(hero))
-                    .append(',').append(csv(active))
-                    .append("\r\n");
+              .append(',').append(csv(name))
+              .append(',').append(csv(description))
+              .append(',').append(csv(unitPrice))
+              .append(',').append(csv(discount))
+              .append(',').append(csv(stock))
+              .append(',').append(csv(categoryCodes))
+              .append(',').append(csv(brandCode))
+              .append(',').append(csv(calification))
+              .append(',').append(csv(images))
+              .append(',').append(csv(isNew))
+              .append(',').append(csv(bestSeller))
+              .append(',').append(csv(featured))
+              .append(',').append(csv(hero))
+              .append(',').append(csv(active))
+              .append("\r\n");
         }
         return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -832,6 +825,7 @@ public class ProductService {
                     ProductDTO dto = parseByHeaderExcel(idx, row);
                     validateProductDTOForCreate(dto);
 
+                    // CORRECCIÓN: Añadir la lógica de subida a S3 aquí también
                     List<String> s3Urls = urlToS3(dto.getImages());
                     dto.setImages(s3Urls);
 
