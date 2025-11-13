@@ -33,6 +33,8 @@ public class S3ImageService {
             MediaType.IMAGE_PNG_VALUE,
             "image/webp"
     );
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
+
 
     public S3ImageService(
             @Value("${AWS_ACCESS_KEY_ID}") String accessKey,
@@ -59,6 +61,7 @@ public class S3ImageService {
         try {
             HttpURLConnection con = (HttpURLConnection) url.openConnection();
             con.setRequestMethod("HEAD");
+            con.setRequestProperty("User-Agent", USER_AGENT); // Simular navegador
             con.setConnectTimeout(8000);
             con.setReadTimeout(8000);
             contentType = con.getContentType();
@@ -88,7 +91,9 @@ public class S3ImageService {
 
         // Crear archivo temporal y descargar completamente la imagen
         Path tempFile = Files.createTempFile("download-", "-" + safeName);
-        try (InputStream in = url.openStream()) {
+        HttpURLConnection downloadCon = (HttpURLConnection) url.openConnection();
+        downloadCon.setRequestProperty("User-Agent", USER_AGENT); // Simular navegador
+        try (InputStream in = downloadCon.getInputStream()) {
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
 
