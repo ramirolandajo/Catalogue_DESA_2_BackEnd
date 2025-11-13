@@ -92,7 +92,7 @@ public class ProductService {
         if (productRepository.findByProductCode(dto.getProductCode()).isPresent()) {
             throw new IllegalArgumentException("productCode ya existe: " + dto.getProductCode());
         }
-        if (productRepository.findByName(dto.getName()).isPresent()) {
+        if (dto.getName() != null && productRepository.findByName(dto.getName()).isPresent()) {
             throw new IllegalArgumentException("El nombre del producto ya existe: " + dto.getName());
         }
         validateCommon(dto);
@@ -202,37 +202,6 @@ public class ProductService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public boolean loadBatchFromCSV(MultipartFile csvFile) throws Exception {
-        String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
-        return loadBatchFromString(content);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public boolean loadBatchFromReader(Reader reader) throws Exception {
-        try (CSVReader r = new CSVReader(reader)) {
-            return loadBatchFromReaderInternal(r);
-        }
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public boolean loadBatchFromString(String content) {
-        if (content == null || content.isBlank()) return false;
-        String normalized = normalizeCsvContent(content);
-        char[] seps = new char[]{',',';','\t'};
-        for (char sep : seps) {
-            try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
-                    .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
-                    .build()) {
-                boolean ok = loadBatchFromReaderInternal(r);
-                if (ok) return true;
-            } catch (Exception e) {
-                // intentar siguiente separador
-            }
-        }
-        return false;
-    }
-
-    @Transactional(rollbackFor = Exception.class)
     public BatchResult loadBatchFromCSVDetailed(MultipartFile csvFile) throws Exception {
         String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
         return loadBatchFromStringDetailed(content);
@@ -273,9 +242,8 @@ public class ProductService {
                 ProductDTO dto = parseByHeader(idx, row);
                 validateProductDTOForCreate(dto);
                 
-                // VALIDACIÓN DE IMÁGENES DURANTE EL PARSEO
                 List<String> s3Urls = urlToS3(dto.getImages());
-                dto.setImages(s3Urls); // Reemplazar con URLs de S3
+                dto.setImages(s3Urls);
 
                 items.add(dto);
             } catch (Exception e) {
@@ -298,17 +266,6 @@ public class ProductService {
             inventoryEventPublisher.emitAgregarProductosBatch(created);
         }
         return new BatchResult(true, items.size(), created.size(), List.of());
-    }
-
-    private boolean loadBatchFromReaderInternal(CSVReader r) throws Exception {
-        BatchResult res = parseCsv(r);
-        if (!res.success()) {
-            String msg = res.errors().stream().limit(3)
-                .map(e -> "linea=" + e.line() + ": " + e.message())
-                .collect(java.util.stream.Collectors.joining("; "));
-            throw new IllegalArgumentException(msg.isBlank() ? "Errores en CSV" : msg);
-        }
-        return res.created() > 0;
     }
 
     private String normalizeCsvContent(String content) {
@@ -350,10 +307,6 @@ public class ProductService {
         dto.setActive(getBool(idx, row, "active", "enabled", "activo", "habilitado"));
         if (dto.getProductCode() == null || dto.getName() == null) throw new IllegalArgumentException("productCode y name son requeridos");
         return dto;
-    }
-
-    private void parseLegacyRow(List<ProductDTO> items, String[] row, int line) {
-        // ... (Este método queda deprecado pero se mantiene por si acaso)
     }
 
     private Integer col(Map<String, Integer> idx, String... keys) {
@@ -717,17 +670,14 @@ public class ProductService {
     public byte[] exportProductsCsv() {
         List<ar.edu.uade.catalogue.model.Product> products = getProducts();
         StringBuilder sb = new StringBuilder();
-        // Header
         sb.append("productCode,name,description,unitPrice,discount,stock,categoryCodes,brandCode,calification,images,new,bestSeller,featured,hero,active\r\n");
         for (ar.edu.uade.catalogue.model.Product p : products) {
             Integer productCode = p.getProductCode();
             String name = nullToEmpty(p.getName());
             String description = nullToEmpty(p.getDescription());
-            // unitPrice y discount en Locale ROOT con punto decimal
             String unitPrice = formatFloat(p.getUnitPrice());
             String discount = formatFloat(p.getDiscount());
             String stock = String.valueOf(p.getStock());
-            // categoryCodes separados por ';'
             String categoryCodes = p.getCategories() == null ? "" : p.getCategories().stream()
                     .map(c -> c.getCategoryCode() == null ? "" : String.valueOf(c.getCategoryCode()))
                     .filter(s -> !s.isBlank())
@@ -742,7 +692,6 @@ public class ProductService {
             String hero = String.valueOf(p.isHero());
             String active = String.valueOf(p.isActive());
 
-            // Escribir fila con escape CSV
             sb.append(csv(productCode))
               .append(',').append(csv(name))
               .append(',').append(csv(description))
@@ -790,7 +739,6 @@ public class ProductService {
         return Math.round(price * 100.0f) / 100.0f;
     }
 
-    // --- Excel batch (único) ---
     @Transactional(rollbackFor = Exception.class)
     public BatchResult loadBatchFromExcel(MultipartFile file) throws Exception {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("Archivo Excel vacío");
@@ -825,7 +773,6 @@ public class ProductService {
                     ProductDTO dto = parseByHeaderExcel(idx, row);
                     validateProductDTOForCreate(dto);
 
-                    // CORRECCIÓN: Añadir la lógica de subida a S3 aquí también
                     List<String> s3Urls = urlToS3(dto.getImages());
                     dto.setImages(s3Urls);
 
@@ -854,15 +801,31 @@ public class ProductService {
     
     private ProductDTO parseByHeaderExcel(Map<String, Integer> idx, Row row) {
         ProductDTO dto = new ProductDTO();
-        dto.setProductCode(getNumericNullable(row, idx, "productcode", "product_code", "codigo_producto").intValue());
-        dto.setName(getString(row, idx, "name", "nombre"));
-        dto.setDescription(getString(row, idx, "description", "descripcion"));
-        dto.setUnitPrice(getNumericNullable(row, idx, "unitprice", "unit_price", "preciounitario").floatValue());
-        dto.setDiscount(getNumericNullable(row, idx, "discount", "descuento").floatValue());
-        dto.setStock(getNumericNullable(row, idx, "stock").intValue());
+        
+        Double productCodeDouble = getNumericNullable(row, idx, "productcode", "product_code", "codigo_producto");
+        if (productCodeDouble == null) throw new IllegalArgumentException("productCode es obligatorio");
+        dto.setProductCode(productCodeDouble.intValue());
+
+        dto.setName(getStringExcel(row, idx, "name", "nombre"));
+        dto.setDescription(getStringExcel(row, idx, "description", "descripcion"));
+
+        Double unitPriceDouble = getNumericNullable(row, idx, "unitprice", "unit_price", "preciounitario");
+        if (unitPriceDouble != null) dto.setUnitPrice(unitPriceDouble.floatValue());
+
+        Double discountDouble = getNumericNullable(row, idx, "discount", "descuento");
+        if (discountDouble != null) dto.setDiscount(discountDouble.floatValue());
+
+        Double stockDouble = getNumericNullable(row, idx, "stock");
+        if (stockDouble != null) dto.setStock(stockDouble.intValue());
+
         dto.setCategoryCodes(getIntListExcel(row, idx, "categorycodes", "category_codes", "codigosdecategoria"));
-        dto.setBrandCode(getNumericNullable(row, idx, "brandcode", "brand_code", "codigodemarca").intValue());
-        dto.setCalification(getNumericNullable(row, idx, "calification", "calificacion").floatValue());
+
+        Double brandCodeDouble = getNumericNullable(row, idx, "brandcode", "brand_code", "codigodemarca");
+        if (brandCodeDouble != null) dto.setBrandCode(brandCodeDouble.intValue());
+
+        Double calificationDouble = getNumericNullable(row, idx, "calification", "calificacion");
+        if (calificationDouble != null) dto.setCalification(calificationDouble.floatValue());
+
         dto.setImages(getStrListExcel(row, idx, "images", "imágenes", "imagenes"));
         dto.setNew(getBoolExcel(row, idx, "new", "isnew", "nuevo"));
         dto.setBestSeller(getBoolExcel(row, idx, "bestseller", "isbestseller"));
@@ -889,13 +852,31 @@ public class ProductService {
             default -> null;
         };
     }
-    private static String getString(Row row, Map<String,Integer> idx, String... keys) {
+    private static String getStringExcel(Row row, Map<String,Integer> idx, String... keys) {
         Integer c = first(idx, keys);
         if (c == null) return null;
         Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
         if (cell == null) return null;
-        String s = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : (cell.getCellType()==CellType.NUMERIC ? String.valueOf((long)cell.getNumericCellValue()) : cell.toString());
-        return s != null ? s.trim() : null;
+
+        if (cell.getHyperlink() != null && cell.getHyperlink().getAddress() != null) {
+            return cell.getHyperlink().getAddress();
+        }
+
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> new java.text.DecimalFormat("#.##########").format(cell.getNumericCellValue());
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> {
+                yield switch(cell.getCachedFormulaResultType()) {
+                    case STRING -> cell.getStringCellValue();
+                    case NUMERIC -> new java.text.DecimalFormat("#.##########").format(cell.getNumericCellValue());
+                    case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+                    default -> "";
+                };
+            }
+            case BLANK -> "";
+            default -> cell.toString();
+        };
     }
     private static boolean getBoolExcel(Row row, Map<String,Integer> idx, String... keys) {
         Integer c = first(idx, keys);
@@ -913,12 +894,12 @@ public class ProductService {
         };
     }
     private static List<Integer> getIntListExcel(Row row, Map<String,Integer> idx, String... keys) {
-        String s = getString(row, idx, keys);
+        String s = getStringExcel(row, idx, keys);
         if (s == null || s.isBlank()) return List.of();
         return Arrays.stream(s.split(";")).map(String::trim).filter(t -> !t.isBlank()).map(Integer::parseInt).collect(Collectors.toList());
     }
     private static List<String> getStrListExcel(Row row, Map<String,Integer> idx, String... keys) {
-        String s = getString(row, idx, keys);
+        String s = getStringExcel(row, idx, keys);
         if (s == null || s.isBlank()) return List.of();
         return Arrays.stream(s.split(";")).map(String::trim).filter(t -> !t.isBlank()).collect(Collectors.toList());
     }
