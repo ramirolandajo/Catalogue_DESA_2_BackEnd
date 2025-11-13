@@ -22,8 +22,10 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVParserBuilder;
@@ -42,6 +44,10 @@ import ar.edu.uade.catalogue.messaging.InventoryEventPublisher;
 
 @Service
 public class ProductService {
+
+    // Estructuras de resultado batch accesibles desde el Controller
+    public static record BatchError(int line, String message) {}
+    public static record BatchResult(boolean success, int totalRows, int created, List<BatchError> errors) {}
 
     @Autowired
     ProductRepository productRepository;
@@ -136,6 +142,7 @@ public class ProductService {
 
         // Subir a S3 y reemplazar URLs
         List<String> imagesToSave = urlToS3(productDTO.getImages());
+        validateImageLengths(imagesToSave, 2048);
 
         Product productToSave = new Product();
         productToSave.setProductCode(productDTO.getProductCode());
@@ -177,6 +184,15 @@ public class ProductService {
         return productToSave;
     }
 
+    private void validateImageLengths(List<String> images, int max) {
+        if (images == null) return;
+        for (String u : images) {
+            if (u != null && u.length() > max) {
+                throw new IllegalArgumentException("La URL de imagen excede la longitud máxima permitida (" + max + ")");
+            }
+        }
+    }
+
     public List<String>urlToS3(List<String>images) throws IOException{
         List<String> s3Images = new ArrayList<>();
         if (images == null) return s3Images;
@@ -215,6 +231,151 @@ public class ProductService {
             }
         }
         return false;
+    }
+
+    // Resultado detallado para CSV desde MultipartFile
+    @Transactional(rollbackFor = Exception.class)
+    public BatchResult loadBatchFromCSVDetailed(MultipartFile csvFile) throws Exception {
+        String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
+        return loadBatchFromStringDetailed(content);
+    }
+
+    // Resultado detallado para CSV desde String
+    @Transactional(rollbackFor = Exception.class)
+    public BatchResult loadBatchFromStringDetailed(String content) throws Exception {
+        if (content == null || content.isBlank()) {
+            return new BatchResult(false, 0, 0, List.of(new BatchError(1, "Contenido CSV vacío")));
+        }
+        String normalized = normalizeCsvContent(content);
+        char[] seps = new char[]{',',';','\t'};
+        BatchResult lastError = null;
+        for (char sep : seps) {
+            try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
+                    .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
+                    .build()) {
+                BatchResult result = parseCsv(r);
+                if (result.success()) return result;
+                lastError = result; // guardar detalle del intento
+            } catch (Exception e) {
+                lastError = new BatchResult(false, 0, 0, List.of(new BatchError(-1, e.getMessage() == null ? "Error de parseo" : e.getMessage())));
+            }
+        }
+        return lastError == null ? new BatchResult(false, 0, 0, List.of(new BatchError(-1, "No se pudo parsear CSV con coma, punto y coma o tab"))) : lastError;
+    }
+
+    // Reutilizable: parsea CSV y si no hay errores, guarda los productos (all-or-nothing). Si hay errores, devuelve detalle sin guardar.
+    private BatchResult parseCsv(CSVReader r) throws Exception {
+        List<ProductDTO> items = new ArrayList<>();
+        String[] header = r.readNext();
+        if (header == null) return new BatchResult(false, 0, 0, List.of(new BatchError(1, "CSV sin encabezado ni filas")));
+
+        Map<String, Integer> idx = new HashMap<>();
+        for (int i = 0; i < header.length; i++) {
+            if (header[i] == null) continue;
+            idx.put(header[i].trim().toLowerCase(), i);
+        }
+        int headerLen = header.length;
+
+        Set<String> headerKeys = new HashSet<>(List.of(
+            "productcode","product_code","codigo","código","codigo_producto","código_producto","code",
+            "name","nombre","description","descripcion","descripción",
+            "unitprice","unit_price","precio","precio_unitario","discount","descuento",
+            "stock",
+            "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos",
+            "brandcode","brand_code","codigo_marca","código_marca",
+            "categories","categorias","marca","brand",
+            "calification","rating","calificacion","calificación",
+            "images","imagenes","imágenes",
+            "new","isnew","nuevo","es_nuevo",
+            "bestseller","isbestseller","is_bestseller","mas_vendido","más_vendido",
+            "featured","isfeatured","is_featured","destacado",
+            "hero",
+            "active","enabled","activo","habilitado"
+        ));
+        boolean hasHeader = idx.keySet().stream().anyMatch(headerKeys::contains);
+
+        if (!hasHeader) {
+            try {
+                parseLegacyRow(items, header, 1);
+            } catch (Exception e) {
+                return new BatchResult(false, 0, 0, List.of(new BatchError(1, e.getMessage())));
+            }
+        }
+
+        String[] row;
+        int line = hasHeader ? 1 : 2;
+
+        List<BatchError> errors = new ArrayList<>();
+
+        while ((row = r.readNext()) != null) {
+            line++;
+            try {
+                ProductDTO dto;
+                if (hasHeader) {
+                    if (row.length > headerLen) {
+                        for (int start = 0; start + headerLen <= row.length; start += headerLen) {
+                            String[] chunk = Arrays.copyOfRange(row, start, start + headerLen);
+                            dto = parseByHeader(idx, chunk);
+                            validateProductDTOForCreate(dto);
+                            items.add(dto);
+                        }
+                    } else {
+                        dto = parseByHeader(idx, row);
+                        validateProductDTOForCreate(dto);
+                        items.add(dto);
+                    }
+                } else {
+                    parseLegacyRow(items, row, line);
+                }
+            } catch (Exception e) {
+                errors.add(new BatchError(line, e.getMessage() == null ? "Fila inválida" : e.getMessage()));
+            }
+        }
+
+        // Duplicados dentro del CSV
+        Set<Integer> seen = new HashSet<>();
+        for (ProductDTO dto : items) {
+            Integer code = dto.getProductCode();
+            if (code != null && !seen.add(code)) {
+                errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return new BatchResult(false, items.size(), 0, errors);
+        }
+
+        List<Product> created = new ArrayList<>();
+        for (int i=0; i<items.size(); i++) {
+            ProductDTO p = items.get(i);
+            try {
+                Product saved = saveProduct(p, true);
+                created.add(saved);
+            } catch (Exception ex) {
+                errors.add(new BatchError(i+2, ex.getMessage() == null ? "Error al persistir producto" : ex.getMessage()));
+            }
+        }
+        if (!errors.isEmpty()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return new BatchResult(false, items.size(), 0, errors);
+        }
+        if (!created.isEmpty()) {
+            inventoryEventPublisher.emitAgregarProductosBatch(created);
+        }
+        return new BatchResult(true, items.size(), created.size(), List.of());
+    }
+
+    // Ajustar implementación existente para reutilizar parseCsv
+    private boolean loadBatchFromReaderInternal(CSVReader r) throws Exception {
+        BatchResult res = parseCsv(r);
+        if (!res.success()) {
+            String msg = res.errors().stream().limit(3)
+                .map(e -> "linea=" + e.line() + ": " + e.message())
+                .collect(java.util.stream.Collectors.joining("; "));
+            throw new IllegalArgumentException(msg.isBlank() ? "Errores en CSV" : msg);
+        }
+        return res.created() > 0;
     }
 
     private String normalizeCsvContent(String content) {
@@ -264,97 +425,6 @@ public class ProductService {
         return s;
     }
 
-    // remove @Transactional here to avoid proxy constraint on private method
-    private boolean loadBatchFromReaderInternal(CSVReader r) throws Exception {
-        List<ProductDTO> items = new ArrayList<>();
-        String[] header = r.readNext();
-        if (header == null) return false;
-
-        Map<String, Integer> idx = new HashMap<>();
-        for (int i = 0; i < header.length; i++) {
-            if (header[i] == null) continue;
-            idx.put(header[i].trim().toLowerCase(), i);
-        }
-        int headerLen = header.length;
-
-        Set<String> headerKeys = new HashSet<>(List.of(
-            "productcode","product_code","codigo","código","codigo_producto","código_producto","code",
-            "name","nombre","description","descripcion","descripción",
-            "unitprice","unit_price","precio","precio_unitario","discount","descuento",
-            "stock",
-            "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos",
-            "brandcode","brand_code","codigo_marca","código_marca",
-            "categories","categorias","marca","brand",
-            "calification","rating","calificacion","calificación",
-            "images","imagenes","imágenes",
-            "new","isnew","nuevo","es_nuevo",
-            "bestseller","isbestseller","is_bestseller","mas_vendido","más_vendido",
-            "featured","isfeatured","is_featured","destacado",
-            "hero",
-            "active","enabled","activo","habilitado"
-        ));
-        boolean hasHeader = idx.keySet().stream().anyMatch(headerKeys::contains);
-
-        if (!hasHeader) {
-            parseLegacyRow(items, header, 1);
-        }
-
-        String[] row;
-        int line = hasHeader ? 1 : 2;
-
-        List<BatchError> errors = new ArrayList<>();
-
-        while ((row = r.readNext()) != null) {
-            line++;
-            try {
-                ProductDTO dto;
-                if (hasHeader) {
-                    if (row.length > headerLen) {
-                        for (int start = 0; start + headerLen <= row.length; start += headerLen) {
-                            String[] chunk = Arrays.copyOfRange(row, start, start + headerLen);
-                            dto = parseByHeader(idx, chunk);
-                            if (dto != null) {
-                                validateProductDTOForCreate(dto);
-                                items.add(dto);
-                            }
-                        }
-                    } else {
-                        dto = parseByHeader(idx, row);
-                        // removed redundant null check as parseByHeader throws on missing required
-                        validateProductDTOForCreate(dto);
-                        items.add(dto);
-                    }
-                } else {
-                    parseLegacyRow(items, row, line);
-                }
-            } catch (Exception e) {
-                errors.add(new BatchError(line, e.getMessage() == null ? "Fila inválida" : e.getMessage()));
-            }
-        }
-
-        // Duplicados dentro del CSV
-        Set<Integer> seen = new HashSet<>();
-        for (ProductDTO dto : items) {
-            Integer code = dto.getProductCode();
-            if (code != null && !seen.add(code)) {
-                errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
-            }
-        }
-
-        if (!errors.isEmpty()) {
-            throw new IllegalArgumentException("Errores en CSV: " + errors.size());
-        }
-
-        List<Product> created = new ArrayList<>();
-        for (ProductDTO p : items) {
-            Product saved = saveProduct(p, true);
-            created.add(saved);
-        }
-        if (!created.isEmpty()) {
-            inventoryEventPublisher.emitAgregarProductosBatch(created);
-        }
-        return !created.isEmpty();
-    }
 
     private ProductDTO parseByHeader(Map<String, Integer> idx, String[] row) {
         ProductDTO dto = new ProductDTO();
@@ -507,6 +577,7 @@ public class ProductService {
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
         productToUpdate.setImages(urlToS3(productUpdateDTO.getImages()));
+        validateImageLengths(productToUpdate.getImages(), 2048);
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
         productToUpdate.setFeatured(productUpdateDTO.isFeatured());
@@ -710,6 +781,7 @@ public class ProductService {
         if (patch.getImages() != null) {
             // Validar cada URL y subir
             List<String> s3 = urlToS3(patch.getImages());
+            validateImageLengths(s3, 2048);
             product.setImages(s3);
         }
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
@@ -923,18 +995,25 @@ public class ProductService {
         if (s == null || s.isBlank()) return List.of();
         return Arrays.stream(s.split(";"))
                 .map(String::trim)
+                .map(ProductService::unquote)
                 .filter(t -> !t.isBlank())
                 .collect(Collectors.toList());
     }
+    private static String unquote(String val) {
+        if (val == null) return null;
+        String v = val.trim();
+        if (v.length() >= 2 && ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'")))) {
+            return v.substring(1, v.length()-1);
+        }
+        return v;
+    }
+
     private static Integer first(Map<String,Integer> idx, String... keys) {
         for (String k : keys) { Integer i = idx.get(k.toLowerCase()); if (i != null) return i; }
         return null;
     }
 
-    // Estructuras de resultado batch
-    public record BatchError(int line, String message) {}
-    public record BatchResult(boolean success, int totalRows, int created, List<BatchError> errors) {}
-
+    // --- Excel batch (único) ---
     @Transactional(rollbackFor = Exception.class)
     public BatchResult loadBatchFromExcel(MultipartFile file) throws Exception {
         if (file == null || file.isEmpty()) throw new IllegalArgumentException("Archivo Excel vacío");
@@ -954,7 +1033,7 @@ public class ProductService {
             for (int c=0; c<header.getLastCellNum(); c++) {
                 Cell cell = header.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
                 if (cell == null) continue;
-                String key = cell.getStringCellValue();
+                String key = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
                 if (key != null) idx.put(key.trim().toLowerCase(), c);
             }
 
@@ -1004,13 +1083,23 @@ public class ProductService {
             }
 
             if (!errors.isEmpty()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
                 return new BatchResult(false, items.size(), 0, errors);
             }
 
             List<Product> created = new ArrayList<>();
-            for (ProductDTO dto : items) {
-                Product saved = saveProduct(dto, true);
-                created.add(saved);
+            for (int i=0; i<items.size(); i++) {
+                ProductDTO dto = items.get(i);
+                try {
+                    Product saved = saveProduct(dto, true);
+                    created.add(saved);
+                } catch (Exception ex) {
+                    errors.add(new BatchError(i+2, ex.getMessage() == null ? "Error al persistir producto" : ex.getMessage()));
+                }
+            }
+            if (!errors.isEmpty()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return new BatchResult(false, items.size(), 0, errors);
             }
             if (!created.isEmpty()) {
                 inventoryEventPublisher.emitAgregarProductosBatch(created);

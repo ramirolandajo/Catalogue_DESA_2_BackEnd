@@ -1,8 +1,6 @@
 package ar.edu.uade.catalogue.controller;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +29,7 @@ import ar.edu.uade.catalogue.model.DTO.ProductDTO;
 import ar.edu.uade.catalogue.model.DTO.ProductPatchDTO;
 import ar.edu.uade.catalogue.model.Product;
 import ar.edu.uade.catalogue.service.ProductService;
+import ar.edu.uade.catalogue.service.ProductService.BatchResult;
 
 @RestController
 @RequestMapping(value="/products")
@@ -77,25 +76,51 @@ public class ProductController {
     public ResponseEntity<?> uploadFlexible(
             @RequestParam(value = "file", required = false) MultipartFile csvFile,
             @RequestBody(required = false) byte[] csvBytes) throws Exception {
-        boolean succeeded = false;
-        if (csvFile != null && !csvFile.isEmpty()) {
-            succeeded = productService.loadBatchFromCSV(csvFile);
-        } else if (csvBytes != null && csvBytes.length > 0) {
-            // Usar el parser robusto basado en String (normalización + multi-separador)
-            String content = new String(csvBytes, StandardCharsets.UTF_8);
-            succeeded = productService.loadBatchFromString(content);
-        } else {
+        if (csvFile == null && (csvBytes == null || csvBytes.length == 0)) {
             return new ResponseEntity<>(Map.of("error","No se recibió archivo ni cuerpo CSV"), HttpStatus.BAD_REQUEST);
         }
-        return new ResponseEntity<>(succeeded ? Map.of("message","Batch cargado") : Map.of("error","Ocurrió un error"), succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+        BatchResult result;
+        if (csvFile != null && !csvFile.isEmpty()) {
+            result = productService.loadBatchFromCSVDetailed(csvFile);
+        } else {
+            String content = new String(csvBytes, StandardCharsets.UTF_8);
+            result = productService.loadBatchFromStringDetailed(content);
+        }
+        if (result.success()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "message", "Batch cargado",
+                "totalRows", result.totalRows(),
+                "created", result.created()
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "Batch rechazado por errores",
+                "totalRows", result.totalRows(),
+                "created", result.created(),
+                "errors", result.errors()
+            ));
+        }
     }
 
     // Alternativa: subir CSV como texto/raw (Insomnia/Postman) sin multipart (ruta dedicada)
     @PostMapping(value = "/uploadRaw", consumes = {"text/csv", "text/plain", MediaType.APPLICATION_OCTET_STREAM_VALUE, "application/octet-stream"})
     public ResponseEntity<?> loadBatchRaw(@RequestBody byte[] csvBytes) throws Exception {
         String content = new String(csvBytes, StandardCharsets.UTF_8);
-        boolean succeeded = productService.loadBatchFromString(content);
-        return new ResponseEntity<>(succeeded ? Map.of("message","Batch cargado") : Map.of("error","Ocurrió un error"), succeeded ? HttpStatus.CREATED : HttpStatus.CONFLICT);
+        BatchResult result = productService.loadBatchFromStringDetailed(content);
+        if (result.success()) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "message", "Batch cargado",
+                "totalRows", result.totalRows(),
+                "created", result.created()
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", "Batch rechazado por errores",
+                "totalRows", result.totalRows(),
+                "created", result.created(),
+                "errors", result.errors()
+            ));
+        }
     }
 
     // Nuevo endpoint: subir Excel (.xlsx/.xls) con all-or-nothing y reporte de errores

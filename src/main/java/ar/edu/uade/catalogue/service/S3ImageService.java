@@ -118,9 +118,16 @@ public class S3ImageService {
     }
 
     private static String sanitize(String name, String ext) {
-        String base = name == null ? "image" : name.replaceAll("[^A-Za-z0-9_-]", "-");
-        if (!base.toLowerCase().endsWith("." + ext)) base = base + "." + ext;
-        return base;
+        String baseRaw = name == null ? "image" : name;
+        int dot = baseRaw.lastIndexOf('.');
+        String baseNoExt = dot > 0 ? baseRaw.substring(0, dot) : baseRaw;
+        String base = baseNoExt.replaceAll("[^A-Za-z0-9_-]", "-");
+        if (base.isBlank()) base = "image";
+        int maxBaseLen = 80; // ajustable
+        if (base.length() > maxBaseLen) {
+            base = base.substring(0, maxBaseLen);
+        }
+        return base + "." + ext.toLowerCase();
     }
 
     private static String toContentType(String ext) {
