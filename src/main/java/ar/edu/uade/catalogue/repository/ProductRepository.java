@@ -11,4 +11,6 @@ import ar.edu.uade.catalogue.model.Product;
 public interface ProductRepository  extends JpaRepository<Product,Integer>{
 
     public Optional<Product> findByProductCode(Integer id);
+
+    public Optional<Product> findByName(String name);
 }

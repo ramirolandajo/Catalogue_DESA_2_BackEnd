@@ -80,6 +80,9 @@ public class ProductService {
 
     public Product createProduct(ProductDTO productDTO) throws IOException {
         validateProductDTOForCreate(productDTO);
+        // Convertir URLs a S3 ANTES de guardar
+        List<String> s3Images = urlToS3(productDTO.getImages());
+        productDTO.setImages(s3Images);
         return saveProduct(productDTO, false);
     }
 
@@ -88,6 +91,9 @@ public class ProductService {
         if (dto.getProductCode() == null) throw new IllegalArgumentException("productCode es obligatorio");
         if (productRepository.findByProductCode(dto.getProductCode()).isPresent()) {
             throw new IllegalArgumentException("productCode ya existe: " + dto.getProductCode());
+        }
+        if (productRepository.findByName(dto.getName()).isPresent()) {
+            throw new IllegalArgumentException("El nombre del producto ya existe: " + dto.getName());
         }
         validateCommon(dto);
     }
@@ -118,9 +124,7 @@ public class ProductService {
         // Validar imágenes: URLs y extensiones soportadas
         if (dto.getImages() != null) {
             for (String u : dto.getImages()) {
-                if (u == null || u.isBlank()) throw new IllegalArgumentException("URL de imagen vacío");
-                // Validación básica: debe parecer URL http(s)
-                if (!(u.startsWith("http://") || u.startsWith("https://"))) {
+                if (u != null && !u.isBlank() && !(u.startsWith("http://") || u.startsWith("https://"))) {
                     throw new IllegalArgumentException("URL de imagen inválida: " + u);
                 }
             }
@@ -128,21 +132,16 @@ public class ProductService {
     }
 
     private Product saveProduct(ProductDTO productDTO, boolean suppressEvents) throws IOException {
-        // Resolver categorías por códigos (prioritario) o por IDs legacy
+        // Este método ahora asume que las URLs de imágenes ya son de S3
         List<Category> categoriesToSave = (productDTO.getCategoryCodes() != null && !productDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productDTO.getCategoryCodes())
                 : categoryService.geCategoriesForProductByID(productDTO.getCategories());
-        // Resolver marca por brandCode (prioritario) o por ID legacy
         Brand brandToSave = (productDTO.getBrandCode() != null)
                 ? brandService.getBrandByCode(productDTO.getBrandCode())
                 : brandService.getBrandByID(productDTO.getBrand());
 
-        // Calcular precio con descuento correctamente
         float priceWithDiscount = computePrice(productDTO.getUnitPrice(), productDTO.getDiscount());
-
-        // Subir a S3 y reemplazar URLs
-        List<String> imagesToSave = urlToS3(productDTO.getImages());
-        validateImageLengths(imagesToSave, 2048);
+        validateImageLengths(productDTO.getImages(), 2048);
 
         Product productToSave = new Product();
         productToSave.setProductCode(productDTO.getProductCode());
@@ -155,7 +154,7 @@ public class ProductService {
         productToSave.setCalification(productDTO.getCalification());
         productToSave.setCategories(categoriesToSave);
         productToSave.setBrand(brandToSave);
-        productToSave.setImages(imagesToSave);
+        productToSave.setImages(productDTO.getImages()); // Guardar las URLs ya procesadas
         productToSave.setNew(productDTO.isNew());
         productToSave.setBestSeller(productDTO.isBestSeller());
         productToSave.setFeatured(productDTO.isFeatured());
@@ -164,18 +163,15 @@ public class ProductService {
 
         productRepository.save(productToSave);
 
-        // Agregamos el producto a las categorias (por códigos prioritario)
         if (productDTO.getCategoryCodes() != null && !productDTO.getCategoryCodes().isEmpty()) {
             categoryService.addProductToCategoriesByCodes(productDTO.getProductCode(), productDTO.getCategoryCodes());
         } else {
             categoryService.addProductToCategories(productDTO.getProductCode(), productDTO.getCategories());
         }
-        // Marca (legacy por ID si vino)
         if (productDTO.getBrand() != null) {
             brandService.addProductToBrand(productDTO.getProductCode(), productDTO.getBrand());
         }
 
-        // Emitir eventos individuales solo si no estamos en batch silencioso
         if (!suppressEvents) {
             inventoryEventPublisher.emitAgregarProducto(productToSave);
             kafkaMockService.sendEvent("POST: Agregar un producto", productToSave);
@@ -193,11 +189,14 @@ public class ProductService {
         }
     }
 
-    public List<String>urlToS3(List<String>images) throws IOException{
+    public List<String> urlToS3(List<String> images) throws IOException {
         List<String> s3Images = new ArrayList<>();
         if (images == null) return s3Images;
         for (String url : images) {
-            s3Images.add(s3ImageService.fromUrlToS3(url));
+            // Ignorar URLs nulas o vacías
+            if (url != null && !url.isBlank()) {
+                s3Images.add(s3ImageService.fromUrlToS3(url));
+            }
         }
         return s3Images;
     }
@@ -233,21 +232,18 @@ public class ProductService {
         return false;
     }
 
-    // Resultado detallado para CSV desde MultipartFile
     @Transactional(rollbackFor = Exception.class)
     public BatchResult loadBatchFromCSVDetailed(MultipartFile csvFile) throws Exception {
         String content = new String(csvFile.getBytes(), StandardCharsets.UTF_8);
         return loadBatchFromStringDetailed(content);
     }
 
-    // Resultado detallado para CSV desde String
     @Transactional(rollbackFor = Exception.class)
     public BatchResult loadBatchFromStringDetailed(String content) throws Exception {
         if (content == null || content.isBlank()) {
             return new BatchResult(false, 0, 0, List.of(new BatchError(1, "Contenido CSV vacío")));
         }
         String normalized = normalizeCsvContent(content);
-        // Forzamos el uso de punto y coma como delimitador
         try (CSVReader r = new CSVReaderBuilder(new StringReader(normalized))
                 .withCSVParser(new CSVParserBuilder().withSeparator(';').build())
                 .build()) {
@@ -257,110 +253,53 @@ public class ProductService {
         }
     }
 
-    // Reutilizable: parsea CSV y si no hay errores, guarda los productos (all-or-nothing). Si hay errores, devuelve detalle sin guardar.
     private BatchResult parseCsv(CSVReader r) throws Exception {
         List<ProductDTO> items = new ArrayList<>();
+        List<BatchError> errors = new ArrayList<>();
         String[] header = r.readNext();
         if (header == null) return new BatchResult(false, 0, 0, List.of(new BatchError(1, "CSV sin encabezado ni filas")));
 
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < header.length; i++) {
-            if (header[i] == null) continue;
-            idx.put(header[i].trim().toLowerCase(), i);
-        }
-        int headerLen = header.length;
-
-        Set<String> headerKeys = new HashSet<>(List.of(
-            "productcode","product_code","codigo","código","codigo_producto","código_producto","code",
-            "name","nombre","description","descripcion","descripción",
-            "unitprice","unit_price","precio","precio_unitario","discount","descuento",
-            "stock",
-            "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos",
-            "brandcode","brand_code","codigo_marca","código_marca",
-            "categories","categorias","marca","brand",
-            "calification","rating","calificacion","calificación",
-            "images","imagenes","imágenes",
-            "new","isnew","nuevo","es_nuevo",
-            "bestseller","isbestseller","is_bestseller","mas_vendido","más_vendido",
-            "featured","isfeatured","is_featured","destacado",
-            "hero",
-            "active","enabled","activo","habilitado"
-        ));
-        boolean hasHeader = idx.keySet().stream().anyMatch(headerKeys::contains);
-
-        if (!hasHeader) {
-            try {
-                parseLegacyRow(items, header, 1);
-            } catch (Exception e) {
-                return new BatchResult(false, 0, 0, List.of(new BatchError(1, e.getMessage())));
-            }
+            if (header[i] != null) idx.put(header[i].trim().toLowerCase(), i);
         }
 
         String[] row;
-        int line = hasHeader ? 1 : 2;
-
-        List<BatchError> errors = new ArrayList<>();
+        int line = 1;
 
         while ((row = r.readNext()) != null) {
             line++;
             try {
-                ProductDTO dto;
-                if (hasHeader) {
-                    if (row.length > headerLen) {
-                        for (int start = 0; start + headerLen <= row.length; start += headerLen) {
-                            String[] chunk = Arrays.copyOfRange(row, start, start + headerLen);
-                            dto = parseByHeader(idx, chunk);
-                            validateProductDTOForCreate(dto);
-                            items.add(dto);
-                        }
-                    } else {
-                        dto = parseByHeader(idx, row);
-                        validateProductDTOForCreate(dto);
-                        items.add(dto);
-                    }
-                } else {
-                    parseLegacyRow(items, row, line);
-                }
+                ProductDTO dto = parseByHeader(idx, row);
+                validateProductDTOForCreate(dto);
+                
+                // VALIDACIÓN DE IMÁGENES DURANTE EL PARSEO
+                List<String> s3Urls = urlToS3(dto.getImages());
+                dto.setImages(s3Urls); // Reemplazar con URLs de S3
+
+                items.add(dto);
             } catch (Exception e) {
                 errors.add(new BatchError(line, e.getMessage() == null ? "Fila inválida" : e.getMessage()));
             }
         }
 
-        // Duplicados dentro del CSV
-        Set<Integer> seen = new HashSet<>();
-        for (ProductDTO dto : items) {
-            Integer code = dto.getProductCode();
-            if (code != null && !seen.add(code)) {
-                errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
-            }
-        }
-
         if (!errors.isEmpty()) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-            return new BatchResult(false, items.size(), 0, errors);
+            return new BatchResult(false, items.size() + errors.size(), 0, errors);
         }
 
         List<Product> created = new ArrayList<>();
-        for (int i=0; i<items.size(); i++) {
-            ProductDTO p = items.get(i);
-            try {
-                Product saved = saveProduct(p, true);
-                created.add(saved);
-            } catch (Exception ex) {
-                errors.add(new BatchError(i+2, ex.getMessage() == null ? "Error al persistir producto" : ex.getMessage()));
-            }
+        for (ProductDTO p : items) {
+            Product saved = saveProduct(p, true);
+            created.add(saved);
         }
-        if (!errors.isEmpty()) {
-            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-            return new BatchResult(false, items.size(), 0, errors);
-        }
+        
         if (!created.isEmpty()) {
             inventoryEventPublisher.emitAgregarProductosBatch(created);
         }
         return new BatchResult(true, items.size(), created.size(), List.of());
     }
 
-    // Ajustar implementación existente para reutilizar parseCsv
     private boolean loadBatchFromReaderInternal(CSVReader r) throws Exception {
         BatchResult res = parseCsv(r);
         if (!res.success()) {
@@ -384,41 +323,8 @@ public class ProductService {
             s = s.replace("\"\"", "\"");
         }
         s = s.replace("\r\n", "\n").replace('\r', '\n');
-        if (!s.contains("\n")) {
-            String[] headerHints = new String[]{"productCode,","product_code,","codigo,","código,","name,","nombre,"};
-            String sLower = s.toLowerCase();
-            boolean looksLikeHeader = false;
-            for (String h : headerHints) {
-                if (sLower.startsWith(h.toLowerCase())) { looksLikeHeader = true; break; }
-            }
-            if (looksLikeHeader) {
-                String[] endHeaderTokens = new String[]{"active","activo","enabled"};
-                for (String token : endHeaderTokens) {
-                    int idx = sLower.indexOf(token.toLowerCase() + " ");
-                    if (idx > 0) {
-                        int pos = idx + token.length() + 1;
-                        if (pos < s.length() && Character.isDigit(s.charAt(pos))) {
-                            s = s.substring(0, pos).trim() + "\n" + s.substring(pos).trim();
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        {
-            java.util.regex.Pattern p = java.util.regex.Pattern.compile("(^|[\\s,])(true|false|1|0|yes|no|si|sí)\\s+(\\d+,)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE | java.util.regex.Pattern.MULTILINE);
-            java.util.regex.Matcher m = p.matcher(s);
-            StringBuffer sb = new StringBuffer();
-            while (m.find()) {
-                String repl = m.group(1) + m.group(2) + "\n" + m.group(3);
-                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(repl));
-            }
-            m.appendTail(sb);
-            s = sb.toString();
-        }
         return s;
     }
-
 
     private ProductDTO parseByHeader(Map<String, Integer> idx, String[] row) {
         ProductDTO dto = new ProductDTO();
@@ -429,15 +335,12 @@ public class ProductService {
         dto.setDiscount(getFloat(idx, row, "discount", "descuento"));
         Integer stockVal = getInt(idx, row, "stock");
         dto.setStock(stockVal != null ? stockVal : 0);
-
         dto.setCategoryCodes(getIntList(idx, row, ";", "categorycodes", "category_codes", "codigosdecategoria", "codigos_categorias", "códigos_categorías", "categoria_codigos"));
         Integer brandCode = getIntNullable(idx, row, "brandcode", "brand_code", "codigodemarca", "codigo_marca", "código_marca");
         if (brandCode != null) dto.setBrandCode(brandCode);
-
         dto.setCategories(getIntList(idx, row, ";", "categories", "categorias"));
         Integer brandId = getIntNullable(idx, row, "brand", "marca");
         if (brandId != null) dto.setBrand(brandId);
-
         dto.setCalification(getFloat(idx, row, "calification", "calificacion", "rating", "calificación"));
         dto.setImages(getStrList(idx, row, ";", "images", "imágenes", "imagenes"));
         dto.setNew(getBool(idx, row, "new", "isnew", "nuevo", "es_nuevo"));
@@ -445,53 +348,16 @@ public class ProductService {
         dto.setFeatured(getBool(idx, row, "featured", "isfeatured", "is_featured", "destacado"));
         dto.setHero(getBool(idx, row, "hero"));
         dto.setActive(getBool(idx, row, "active", "enabled", "activo", "habilitado"));
-
         if (dto.getProductCode() == null || dto.getName() == null) throw new IllegalArgumentException("productCode y name son requeridos");
         return dto;
     }
 
     private void parseLegacyRow(List<ProductDTO> items, String[] row, int line) {
-        if (row.length < 15) {
-            throw new IllegalArgumentException("Fila legacy inválida en línea " + line + ": columnas=" + row.length);
-        }
-        try {
-            ProductDTO dto = new ProductDTO();
-            dto.setProductCode(Integer.parseInt(row[0].trim()));
-            dto.setName(row[1].trim());
-            dto.setDescription(row[2].trim());
-            dto.setUnitPrice(parseFloatSafe(row[3]));
-            dto.setDiscount(parseFloatSafe(row[4]));
-            dto.setStock(Integer.parseInt(row[5].trim()));
-
-            dto.setCategories(Arrays.stream(row[6].split(";"))
-                    .filter(s -> !s.isBlank())
-                    .map(Integer::parseInt)
-                    .toList());
-
-            dto.setBrand(Integer.parseInt(row[7].trim()));
-            dto.setCalification(parseFloatSafe(row[8]));
-
-            dto.setImages(Arrays.stream(row[9].split(";"))
-                    .filter(s -> !s.isBlank())
-                    .toList());
-
-            dto.setNew(parseBoolSafe(row[10]));
-            dto.setBestSeller(parseBoolSafe(row[11]));
-            dto.setFeatured(parseBoolSafe(row[12]));
-            dto.setHero(parseBoolSafe(row[13]));
-            dto.setActive(parseBoolSafe(row[14]));
-            validateProductDTOForCreate(dto);
-            items.add(dto);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Error legacy en línea " + line + ": " + java.util.Arrays.toString(row));
-        }
+        // ... (Este método queda deprecado pero se mantiene por si acaso)
     }
 
     private Integer col(Map<String, Integer> idx, String... keys) {
-        for (String k : keys) {
-            Integer i = idx.get(k.toLowerCase());
-            if (i != null) return i;
-        }
+        for (String k : keys) { Integer i = idx.get(k.toLowerCase()); if (i != null) return i; }
         return null;
     }
     private String getStr(Map<String, Integer> idx, String[] row, String... keys) {
@@ -515,21 +381,16 @@ public class ProductService {
         return parseBoolSafe(row[i]);
     }
     private List<Integer> getIntList(Map<String, Integer> idx, String[] row, String sep, String... keys) {
-        Integer i = col(idx, keys);
-        if (i == null || i >= row.length) return java.util.List.of();
-        String v = safeStr(row[i]);
-        if (v.isBlank()) return java.util.List.of();
+        String v = getStr(idx, row, keys);
+        if (v == null || v.isBlank()) return java.util.List.of();
         return Arrays.stream(v.split(sep)).map(String::trim).filter(s->!s.isBlank()).map(Integer::parseInt).toList();
     }
     private List<String> getStrList(Map<String, Integer> idx, String[] row, String sep, String... keys) {
-        Integer i = col(idx, keys);
-        if (i == null || i >= row.length) return java.util.List.of();
-        String v = safeStr(row[i]);
-        if (v.isBlank()) return java.util.List.of();
+        String v = getStr(idx, row, keys);
+        if (v == null || v.isBlank()) return java.util.List.of();
         return Arrays.stream(v.split(sep)).map(String::trim).filter(s->!s.isBlank()).toList();
     }
     private String safeStr(String s) { return s == null ? "" : s.trim(); }
-
     private float parseFloatSafe(String s) {
         if (s == null) return 0f;
         String norm = s.trim().replace("%", "");
@@ -546,12 +407,24 @@ public class ProductService {
         if (productUpdateDTO == null || productUpdateDTO.getProductCode() == null) {
             throw new IllegalArgumentException("productCode es obligatorio para actualizar");
         }
-        // Si quiere cambiar el productCode, no se permite colisión
-        Optional<Product> existing = productRepository.findByProductCode(productUpdateDTO.getProductCode());
-        Product productToUpdate = existing.orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productUpdateDTO.getProductCode(), 1));
+        Product productToUpdate = productRepository.findByProductCode(productUpdateDTO.getProductCode())
+            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productUpdateDTO.getProductCode(), 1));
+
+        if (!productToUpdate.getProductCode().equals(productUpdateDTO.getProductCode())) {
+            throw new IllegalArgumentException("No se puede modificar el productCode de un producto existente.");
+        }
+        if (productUpdateDTO.getName() != null && !productUpdateDTO.getName().equals(productToUpdate.getName())) {
+            productRepository.findByName(productUpdateDTO.getName()).ifPresent(p -> {
+                if (!p.getProductCode().equals(productToUpdate.getProductCode())) {
+                    throw new IllegalArgumentException("El nombre de producto '" + productUpdateDTO.getName() + "' ya está en uso por otro producto.");
+                }
+            });
+        }
 
         validateCommon(productUpdateDTO);
 
+        List<String> s3Images = urlToS3(productUpdateDTO.getImages());
+        
         List<Category>categoriesToUpdate = (productUpdateDTO.getCategoryCodes() != null && !productUpdateDTO.getCategoryCodes().isEmpty())
                 ? categoryService.geCategoriesForProductByCodes(productUpdateDTO.getCategoryCodes())
                 : categoryService.geCategoriesForProductByID(productUpdateDTO.getCategories());
@@ -570,7 +443,7 @@ public class ProductService {
         productToUpdate.setCategories(categoriesToUpdate);
         productToUpdate.setBrand(brandToUpdate);
         productToUpdate.setCalification(productUpdateDTO.getCalification());
-        productToUpdate.setImages(urlToS3(productUpdateDTO.getImages()));
+        productToUpdate.setImages(s3Images);
         validateImageLengths(productToUpdate.getImages(), 2048);
         productToUpdate.setNew(productUpdateDTO.isNew());
         productToUpdate.setBestSeller(productUpdateDTO.isBestSeller());
@@ -734,6 +607,13 @@ public class ProductService {
             if (patch.getName().isBlank() || !NAME_ALLOWED.matcher(patch.getName()).matches()) {
                 throw new IllegalArgumentException("Nombre inválido (no vacío y con letras)");
             }
+            if (!patch.getName().equals(product.getName())) {
+                productRepository.findByName(patch.getName()).ifPresent(p -> {
+                    if (!p.getProductCode().equals(product.getProductCode())) {
+                        throw new IllegalArgumentException("El nombre de producto '" + patch.getName() + "' ya está en uso por otro producto.");
+                    }
+                });
+            }
             product.setName(patch.getName());
         }
         if (patch.getDescription() != null) {
@@ -773,7 +653,6 @@ public class ProductService {
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
         if (patch.getImages() != null) {
-            // Validar cada URL y subir
             List<String> s3 = urlToS3(patch.getImages());
             validateImageLengths(s3, 2048);
             product.setImages(s3);
@@ -805,7 +684,7 @@ public class ProductService {
 
     public Product activateProduct(Integer productCode) {
         Product product = productRepository.findByProductCode(productCode)
-            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
+                .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         if (product.isActive()) {
             throw new IllegalStateException("El producto ya estaba activado");
@@ -822,7 +701,7 @@ public class ProductService {
 
     public Product addReview(Integer productCode, String message, Float rateUpdated) {
         Product product = productRepository.findByProductCode(productCode)
-            .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
+                .orElseThrow(() -> new EmptyResultDataAccessException("Producto no encontrado para productCode=" + productCode, 1));
 
         if (message != null && !message.isBlank()) {
             java.util.ArrayList<ReviewEntry> list = product.getReviews() == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(product.getReviews());
@@ -872,21 +751,21 @@ public class ProductService {
 
             // Escribir fila con escape CSV
             sb.append(csv(productCode))
-              .append(',').append(csv(name))
-              .append(',').append(csv(description))
-              .append(',').append(csv(unitPrice))
-              .append(',').append(csv(discount))
-              .append(',').append(csv(stock))
-              .append(',').append(csv(categoryCodes))
-              .append(',').append(csv(brandCode))
-              .append(',').append(csv(calification))
-              .append(',').append(csv(images))
-              .append(',').append(csv(isNew))
-              .append(',').append(csv(bestSeller))
-              .append(',').append(csv(featured))
-              .append(',').append(csv(hero))
-              .append(',').append(csv(active))
-              .append("\r\n");
+                    .append(',').append(csv(name))
+                    .append(',').append(csv(description))
+                    .append(',').append(csv(unitPrice))
+                    .append(',').append(csv(discount))
+                    .append(',').append(csv(stock))
+                    .append(',').append(csv(categoryCodes))
+                    .append(',').append(csv(brandCode))
+                    .append(',').append(csv(calification))
+                    .append(',').append(csv(images))
+                    .append(',').append(csv(isNew))
+                    .append(',').append(csv(bestSeller))
+                    .append(',').append(csv(featured))
+                    .append(',').append(csv(hero))
+                    .append(',').append(csv(active))
+                    .append("\r\n");
         }
         return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -894,7 +773,6 @@ public class ProductService {
     private static String nullToEmpty(String s) { return s == null ? "" : s; }
     private static String formatFloat(float f) { return String.format(Locale.ROOT, "%s", stripTrailingZeros(f)); }
     private static String stripTrailingZeros(float f) {
-        // Evitar notación científica y ceros de más
         java.math.BigDecimal bd = new java.math.BigDecimal(Float.toString(f));
         bd = bd.stripTrailingZeros();
         return bd.toPlainString();
@@ -909,29 +787,97 @@ public class ProductService {
         return s;
     }
 
-    // Helpers para precio y descuento
     private float normalizeDiscount(float discount) {
-        // Si viene 8 → 0.08; si ya viene 0.08, lo dejamos igual
         return discount > 1.0f ? (discount / 100.0f) : discount;
     }
 
     private float computePrice(float unitPrice, float discount) {
         float d = normalizeDiscount(discount);
         float price = unitPrice * (1.0f - d);
-        // redondeo a 2 decimales
         return Math.round(price * 100.0f) / 100.0f;
     }
 
-    // Utilidades Excel
-    private static double getNumeric(Row row, Map<String,Integer> idx, int r, String... keys) {
-        Double v = getNumericNullable(row, idx, keys);
-        if (v == null) throw new IllegalArgumentException("Campo numérico requerido vacío en fila " + (r+1));
-        return v;
+    // --- Excel batch (único) ---
+    @Transactional(rollbackFor = Exception.class)
+    public BatchResult loadBatchFromExcel(MultipartFile file) throws Exception {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Archivo Excel vacío");
+        String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        try (InputStream is = file.getInputStream()) {
+            Workbook wb;
+            if (name.endsWith(".xlsx")) wb = new XSSFWorkbook(is);
+            else if (name.endsWith(".xls")) wb = new HSSFWorkbook(is);
+            else throw new IllegalArgumentException("Formato no soportado (use .xlsx o .xls)");
+
+            Sheet sheet = wb.getSheetAt(0);
+            if (sheet == null) throw new IllegalArgumentException("Sin hoja 0 en Excel");
+
+            Map<String,Integer> idx = new HashMap<>();
+            Row header = sheet.getRow(0);
+            if (header == null) throw new IllegalArgumentException("Excel sin encabezado");
+            for (int c=0; c<header.getLastCellNum(); c++) {
+                Cell cell = header.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                if (cell != null && cell.getCellType() == CellType.STRING) {
+                    String key = cell.getStringCellValue();
+                    if (key != null) idx.put(key.trim().toLowerCase(), c);
+                }
+            }
+
+            List<ProductDTO> items = new ArrayList<>();
+            List<BatchError> errors = new ArrayList<>();
+
+            for (int r=1; r<=sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+                try {
+                    ProductDTO dto = parseByHeaderExcel(idx, row);
+                    validateProductDTOForCreate(dto);
+
+                    List<String> s3Urls = urlToS3(dto.getImages());
+                    dto.setImages(s3Urls);
+
+                    items.add(dto);
+                } catch (Exception ex) {
+                    errors.add(new BatchError(r+1, ex.getMessage() == null ? "Fila inválida" : ex.getMessage()));
+                }
+            }
+
+            if (!errors.isEmpty()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return new BatchResult(false, items.size() + errors.size(), 0, errors);
+            }
+
+            List<Product> created = new ArrayList<>();
+            for (ProductDTO dto : items) {
+                Product saved = saveProduct(dto, true);
+                created.add(saved);
+            }
+            if (!created.isEmpty()) {
+                inventoryEventPublisher.emitAgregarProductosBatch(created);
+            }
+            return new BatchResult(true, items.size(), created.size(), List.of());
+        }
     }
-    private static double getNumericOptional(Row row, Map<String,Integer> idx, int r, double def, String... keys) {
-        Double v = getNumericNullable(row, idx, keys);
-        return v == null ? def : v;
+    
+    private ProductDTO parseByHeaderExcel(Map<String, Integer> idx, Row row) {
+        ProductDTO dto = new ProductDTO();
+        dto.setProductCode(getNumericNullable(row, idx, "productcode", "product_code", "codigo_producto").intValue());
+        dto.setName(getString(row, idx, "name", "nombre"));
+        dto.setDescription(getString(row, idx, "description", "descripcion"));
+        dto.setUnitPrice(getNumericNullable(row, idx, "unitprice", "unit_price", "preciounitario").floatValue());
+        dto.setDiscount(getNumericNullable(row, idx, "discount", "descuento").floatValue());
+        dto.setStock(getNumericNullable(row, idx, "stock").intValue());
+        dto.setCategoryCodes(getIntListExcel(row, idx, "categorycodes", "category_codes", "codigosdecategoria"));
+        dto.setBrandCode(getNumericNullable(row, idx, "brandcode", "brand_code", "codigodemarca").intValue());
+        dto.setCalification(getNumericNullable(row, idx, "calification", "calificacion").floatValue());
+        dto.setImages(getStrListExcel(row, idx, "images", "imágenes", "imagenes"));
+        dto.setNew(getBoolExcel(row, idx, "new", "isnew", "nuevo"));
+        dto.setBestSeller(getBoolExcel(row, idx, "bestseller", "isbestseller"));
+        dto.setFeatured(getBoolExcel(row, idx, "featured", "isfeatured", "destacado"));
+        dto.setHero(getBoolExcel(row, idx, "hero"));
+        dto.setActive(getBoolExcel(row, idx, "active", "activo"));
+        return dto;
     }
+
     private static Double getNumericNullable(Row row, Map<String,Integer> idx, String... keys) {
         Integer c = first(idx, keys);
         if (c == null) return null;
@@ -949,7 +895,7 @@ public class ProductService {
             default -> null;
         };
     }
-    private static String getString(Row row, Map<String,Integer> idx, int r, String... keys) {
+    private static String getString(Row row, Map<String,Integer> idx, String... keys) {
         Integer c = first(idx, keys);
         if (c == null) return null;
         Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
@@ -973,132 +919,17 @@ public class ProductService {
         };
     }
     private static List<Integer> getIntListExcel(Row row, Map<String,Integer> idx, String... keys) {
-        List<String> parts = splitListExcel(row, idx, keys);
-        List<Integer> out = new ArrayList<>();
-        for (String p : parts) {
-            try { out.add(Integer.parseInt(p)); } catch (Exception e) { throw new IllegalArgumentException("Valor no numérico en lista: " + p); }
-        }
-        return out;
-    }
-    private static List<String> splitListExcel(Row row, Map<String,Integer> idx, String... keys) {
-        Integer c = first(idx, keys);
-        if (c == null) return List.of();
-        Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-        if (cell == null) return List.of();
-        String s = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
+        String s = getString(row, idx, keys);
         if (s == null || s.isBlank()) return List.of();
-        return Arrays.stream(s.split(";"))
-                .map(String::trim)
-                .map(ProductService::unquote)
-                .filter(t -> !t.isBlank())
-                .collect(Collectors.toList());
+        return Arrays.stream(s.split(";")).map(String::trim).filter(t -> !t.isBlank()).map(Integer::parseInt).collect(Collectors.toList());
     }
-    private static String unquote(String val) {
-        if (val == null) return null;
-        String v = val.trim();
-        if (v.length() >= 2 && ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'")))) {
-            return v.substring(1, v.length()-1);
-        }
-        return v;
+    private static List<String> getStrListExcel(Row row, Map<String,Integer> idx, String... keys) {
+        String s = getString(row, idx, keys);
+        if (s == null || s.isBlank()) return List.of();
+        return Arrays.stream(s.split(";")).map(String::trim).filter(t -> !t.isBlank()).collect(Collectors.toList());
     }
-
     private static Integer first(Map<String,Integer> idx, String... keys) {
         for (String k : keys) { Integer i = idx.get(k.toLowerCase()); if (i != null) return i; }
         return null;
-    }
-
-    // --- Excel batch (único) ---
-    @Transactional(rollbackFor = Exception.class)
-    public BatchResult loadBatchFromExcel(MultipartFile file) throws Exception {
-        if (file == null || file.isEmpty()) throw new IllegalArgumentException("Archivo Excel vacío");
-        String name = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
-        try (InputStream is = file.getInputStream()) {
-            Workbook wb;
-            if (name.endsWith(".xlsx")) wb = new XSSFWorkbook(is);
-            else if (name.endsWith(".xls")) wb = new HSSFWorkbook(is);
-            else throw new IllegalArgumentException("Formato no soportado (use .xlsx o .xls)");
-
-            Sheet sheet = wb.getSheetAt(0);
-            if (sheet == null) throw new IllegalArgumentException("Sin hoja 0 en Excel");
-
-            Map<String,Integer> idx = new HashMap<>();
-            Row header = sheet.getRow(0);
-            if (header == null) throw new IllegalArgumentException("Excel sin encabezado");
-            for (int c=0; c<header.getLastCellNum(); c++) {
-                Cell cell = header.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
-                if (cell == null) continue;
-                String key = cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
-                if (key != null) idx.put(key.trim().toLowerCase(), c);
-            }
-
-            List<ProductDTO> items = new ArrayList<>();
-            List<BatchError> errors = new ArrayList<>();
-
-            for (int r=1; r<=sheet.getLastRowNum(); r++) {
-                Row row = sheet.getRow(r);
-                if (row == null) continue;
-                try {
-                    ProductDTO dto = new ProductDTO();
-                    dto.setProductCode((int) getNumeric(row, idx, r, "productcode","product_code","codigo","código","codigo_producto","código_producto","code"));
-                    dto.setName(getString(row, idx, r, "name","nombre"));
-                    dto.setDescription(getString(row, idx, r, "description","descripcion","descripción"));
-                    dto.setUnitPrice((float) getNumeric(row, idx, r, "unitprice","unit_price","precio","precio_unitario"));
-                    dto.setDiscount((float) getNumericOptional(row, idx, r, 0.0, "discount","descuento"));
-                    dto.setStock((int) getNumericOptional(row, idx, r, 0.0, "stock"));
-                    dto.setCategoryCodes(getIntListExcel(row, idx, "categorycodes","category_codes","codigos_categorias","códigos_categorías","categoria_codigos"));
-                    Double bc = getNumericNullable(row, idx, "brandcode","brand_code","codigo_marca","código_marca");
-                    if (bc != null) dto.setBrandCode(bc.intValue());
-                    dto.setCategories(getIntListExcel(row, idx, "categories","categorias"));
-                    Double bid = getNumericNullable(row, idx, "brand","marca");
-                    if (bid != null) dto.setBrand(bid.intValue());
-                    Double cal = getNumericNullable(row, idx, "calification","rating","calificacion","calificación");
-                    if (cal != null) dto.setCalification(cal.floatValue());
-                    dto.setImages(splitListExcel(row, idx, "images","imagenes","imágenes"));
-                    dto.setNew(getBoolExcel(row, idx, "new","isnew","nuevo","es_nuevo"));
-                    dto.setBestSeller(getBoolExcel(row, idx, "bestseller","isbestseller","is_bestseller","mas_vendido","más_vendido"));
-                    dto.setFeatured(getBoolExcel(row, idx, "featured","isfeatured","is_featured","destacado"));
-                    dto.setHero(getBoolExcel(row, idx, "hero"));
-                    dto.setActive(getBoolExcel(row, idx, "active","enabled","activo","habilitado"));
-
-                    validateProductDTOForCreate(dto);
-                    items.add(dto);
-                } catch (Exception ex) {
-                    errors.add(new BatchError(r+1, ex.getMessage() == null ? "Fila inválida" : ex.getMessage()));
-                }
-            }
-
-            // Duplicados de productCode dentro del archivo
-            Set<Integer> seen = new HashSet<>();
-            for (ProductDTO dto : items) {
-                Integer code = dto.getProductCode();
-                if (code != null && !seen.add(code)) {
-                    errors.add(new BatchError(-1, "productCode duplicado en archivo: " + code));
-                }
-            }
-
-            if (!errors.isEmpty()) {
-                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-                return new BatchResult(false, items.size(), 0, errors);
-            }
-
-            List<Product> created = new ArrayList<>();
-            for (int i=0; i<items.size(); i++) {
-                ProductDTO dto = items.get(i);
-                try {
-                    Product saved = saveProduct(dto, true);
-                    created.add(saved);
-                } catch (Exception ex) {
-                    errors.add(new BatchError(i+2, ex.getMessage() == null ? "Error al persistir producto" : ex.getMessage()));
-                }
-            }
-            if (!errors.isEmpty()) {
-                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-                return new BatchResult(false, items.size(), 0, errors);
-            }
-            if (!created.isEmpty()) {
-                inventoryEventPublisher.emitAgregarProductosBatch(created);
-            }
-            return new BatchResult(true, items.size(), created.size(), List.of());
-        }
     }
 }
