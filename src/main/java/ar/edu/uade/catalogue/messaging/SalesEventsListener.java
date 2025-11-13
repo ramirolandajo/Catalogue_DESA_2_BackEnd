@@ -119,7 +119,7 @@ public class SalesEventsListener {
                 // Dispatch (incluye alias sin tildes ni espacios para rollback)
                 switch (normalized) {
                     case "post: compra pendiente" -> inventoryService.reserveStock(effectivePayload);
-                    case "post: compra confirmada" -> inventoryService.confirmStock(effectivePayload);
+                    // case "post: compra confirmada" -> inventoryService.confirmStock(effectivePayload); // No-op
                     case "delete: compra cancelada" -> inventoryService.cancelReservation(effectivePayload);
                     case "post: stock rollback - compra cancelada", "stockrollback_cartcancelled" -> inventoryService.applyRollback(effectivePayload);
                     default -> log.info("[VentasConsumer] Ignorado eventType='{}' (normalized='{}')", type, normalized);
