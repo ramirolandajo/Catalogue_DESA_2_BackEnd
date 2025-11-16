@@ -617,21 +617,32 @@ public class ProductService {
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
 
-        if (patchImages != null && !patchImages.isEmpty()) {
-            // Subir las nuevas
-            List<String> newImages = fileToS3(patchImages);
+        // Tomar las imágenes que el usuario quiere mantener
+        List<String> finalImages = new ArrayList<>();
 
-            // Recuperar las viejas
-            List<String> oldImages = product.getImages() != null
-                    ? new ArrayList<>(product.getImages())
-                    : new ArrayList<>();
-
-            // Agregar las nuevas a las viejas
-            oldImages.addAll(newImages);
-
-            validateImageLengths(oldImages, 2048);
-            product.setImages(oldImages);
+        if (patch.getKeepImages() != null) {
+            // Solo conservar las que existen realmente en el producto
+            for (String img : patch.getKeepImages()) {
+                if (product.getImages() != null && product.getImages().contains(img)) {
+                    finalImages.add(img);
+                }
+            }
+        } else {
+            // Si no se envió keepImages, se asume que quiere conservar todo
+            if (product.getImages() != null) {
+                finalImages.addAll(product.getImages());
+            }
         }
+
+        // Agregar las nuevas imágenes subidas vía multipart
+        if (patchImages != null && !patchImages.isEmpty()) {
+            List<String> newImages = fileToS3(patchImages);
+            finalImages.addAll(newImages);
+        }
+
+        // Validar y guardar
+        validateImageLengths(finalImages, 2048);
+        product.setImages(finalImages);
 
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
         if (patch.getIsBestSeller() != null) product.setBestSeller(patch.getIsBestSeller());

@@ -32,7 +32,7 @@ public class ProductPatchDTO {
     private Integer brand;
     private Float calification;
     private List<String> images;
-
+    private List<String> keepImages;
     @JsonProperty("new")
     private Boolean isNew;
     @JsonProperty("bestSeller")
