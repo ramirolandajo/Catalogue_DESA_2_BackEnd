@@ -616,11 +616,23 @@ public class ProductService {
             product.setBrand(b);
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
-        if (patchImages != null) {
-            List<String> s3 = fileToS3(patchImages);
-            validateImageLengths(s3, 2048);
-            product.setImages(s3);
+
+        if (patchImages != null && !patchImages.isEmpty()) {
+            // Subir las nuevas
+            List<String> newImages = fileToS3(patchImages);
+
+            // Recuperar las viejas
+            List<String> oldImages = product.getImages() != null
+                    ? new ArrayList<>(product.getImages())
+                    : new ArrayList<>();
+
+            // Agregar las nuevas a las viejas
+            oldImages.addAll(newImages);
+
+            validateImageLengths(oldImages, 2048);
+            product.setImages(oldImages);
         }
+
         if (patch.getIsNew() != null) product.setNew(patch.getIsNew());
         if (patch.getIsBestSeller() != null) product.setBestSeller(patch.getIsBestSeller());
         if (patch.getIsFeatured() != null) product.setFeatured(patch.getIsFeatured());
