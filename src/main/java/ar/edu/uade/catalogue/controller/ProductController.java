@@ -14,15 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import ar.edu.uade.catalogue.model.DTO.ProductDTO;
@@ -60,9 +52,9 @@ public class ProductController {
     }
 
     @PostMapping(value="/create",consumes={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<?>createProduct(@RequestBody ProductDTO productDTO){
+    public ResponseEntity<?>createProduct(@RequestBody ProductDTO productDTO, @RequestPart List<MultipartFile> images){
         try {
-            Product productSaved = productService.createProduct(productDTO);
+            Product productSaved = productService.createProduct(productDTO,images);
             return new ResponseEntity<>(productSaved,HttpStatus.CREATED);
         } catch (Exception e) {
             Map<String,Object> body = new HashMap<>();
@@ -157,9 +149,9 @@ public class ProductController {
     }
 
     @PatchMapping(value="/update", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>patchProduct(@RequestBody ProductPatchDTO patch){
+    public ResponseEntity<Product>patchProduct(@RequestBody ProductPatchDTO patch, @RequestPart List<MultipartFile> patchImages){
         try {
-            Product productUpdated = productService.patchProduct(patch);
+            Product productUpdated = productService.patchProduct(patch, patchImages);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
         } catch (EmptyResultDataAccessException | IOException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);

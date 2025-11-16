@@ -3,11 +3,13 @@ package ar.edu.uade.catalogue.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
@@ -114,6 +116,50 @@ public class S3ImageService {
                 connection.disconnect();
             }
         }
+    }
+
+    public String uploadMultipart(MultipartFile file) throws IOException {
+
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("La imagen está vacía");
+        }
+
+        String originalName = file.getOriginalFilename();
+        if (originalName == null) originalName = "image.jpg";
+
+        // Extraer extensión real
+        String ext = extractExt(originalName);
+        if (ext == null || !ALLOWED_EXT.contains(ext.toLowerCase())) {
+            throw new IllegalArgumentException("Formato no permitido: " + ext);
+        }
+
+        // Validar content-type
+        String ct = file.getContentType();
+        if (ct == null || !ALLOWED_CT.contains(ct.toLowerCase())) {
+            throw new IllegalArgumentException("Content-Type no permitido: " + ct);
+        }
+
+        // Nombre seguro
+        String safeName = sanitize(originalName, ext);
+
+        // Key final del objeto en S3
+        String key = "products/" + UUID.randomUUID() + "-" + safeName;
+
+        // Request de subida
+        PutObjectRequest req = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .contentType(ct)
+                .acl(ObjectCannedACL.PUBLIC_READ)
+                .build();
+
+        // Subir bytes del archivo real
+        s3Client.putObject(
+                req,
+                RequestBody.fromInputStream(file.getInputStream(), file.getSize())
+        );
+
+        return "https://" + bucketName + ".s3." + region + ".amazonaws.com/" + key;
     }
 
     private static String extractExt(String fileName) {

@@ -78,10 +78,10 @@ public class ProductService {
         return productOptional.orElse(null);
     }
 
-    public Product createProduct(ProductDTO productDTO) throws IOException {
+    public Product createProduct(ProductDTO productDTO, List<MultipartFile> images) throws IOException {
         validateProductDTOForCreate(productDTO);
-        // Convertir URLs a S3 ANTES de guardar
-        List<String> s3Images = urlToS3(productDTO.getImages());
+        // Convertir Archivos a S3 ANTES de guardar
+        List<String> s3Images = fileToS3(images);
         productDTO.setImages(s3Images);
         return saveProduct(productDTO, false);
     }
@@ -196,6 +196,17 @@ public class ProductService {
             // Ignorar URLs nulas o vacías
             if (url != null && !url.isBlank()) {
                 s3Images.add(s3ImageService.fromUrlToS3(url));
+            }
+        }
+        return s3Images;
+    }
+
+    public List<String> fileToS3(List<MultipartFile> images) throws IOException {
+        List<String> s3Images = new ArrayList<>();
+        if(images == null) return s3Images;
+        for (MultipartFile file : images) {
+            if(file != null && !file.isEmpty() && file.getSize() > 0) {
+                s3Images.add(s3ImageService.uploadMultipart(file));
             }
         }
         return s3Images;
@@ -546,7 +557,7 @@ public class ProductService {
         }
     }
 
-    public Product patchProduct(ProductPatchDTO patch) throws IOException {
+    public Product patchProduct(ProductPatchDTO patch, List<MultipartFile> patchImages) throws IOException {
         if (patch.getProductCode() == null) {
             throw new EmptyResultDataAccessException("productCode es requerido para PATCH", 1);
         }
@@ -605,8 +616,8 @@ public class ProductService {
             product.setBrand(b);
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
-        if (patch.getImages() != null) {
-            List<String> s3 = urlToS3(patch.getImages());
+        if (patchImages != null) {
+            List<String> s3 = fileToS3(patchImages);
             validateImageLengths(s3, 2048);
             product.setImages(s3);
         }
