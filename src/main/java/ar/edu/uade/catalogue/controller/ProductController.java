@@ -51,8 +51,8 @@ public class ProductController {
         }
     }
 
-    @PostMapping(value="/create",consumes={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<?>createProduct(@RequestBody ProductDTO productDTO, @RequestPart List<MultipartFile> images){
+    @PostMapping(value="/create",consumes={MediaType.MULTIPART_FORM_DATA_VALUE})
+    public ResponseEntity<?>createProduct(@RequestPart ProductDTO productDTO, @RequestPart List<MultipartFile> images){
         try {
             Product productSaved = productService.createProduct(productDTO,images);
             return new ResponseEntity<>(productSaved,HttpStatus.CREATED);
@@ -148,8 +148,8 @@ public class ProductController {
         return new ResponseEntity<>(csv, headers, HttpStatus.OK);
     }
 
-    @PatchMapping(value="/update", consumes={MediaType.APPLICATION_JSON_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Product>patchProduct(@RequestBody ProductPatchDTO patch, @RequestPart List<MultipartFile> patchImages){
+    @PatchMapping(value="/update", consumes={MediaType.MULTIPART_FORM_DATA_VALUE}, produces={MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Product>patchProduct(@RequestPart ProductPatchDTO patch, @RequestPart List<MultipartFile> patchImages){
         try {
             Product productUpdated = productService.patchProduct(patch, patchImages);
             return new ResponseEntity<>(productUpdated, HttpStatus.OK);
