@@ -101,7 +101,7 @@ class ProductServiceTest {
             return p;
         });
 
-        Product created = productService.createProduct(dto);
+        Product created = productService.createProduct(dto,List.of());
 
         assertNotNull(created);
         assertEquals("iPhone 15", created.getName());
