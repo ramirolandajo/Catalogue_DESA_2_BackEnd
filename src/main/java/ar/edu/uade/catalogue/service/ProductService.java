@@ -617,30 +617,27 @@ public class ProductService {
         }
         if (patch.getCalification() != null) product.setCalification(patch.getCalification());
 
-        // Tomar las imágenes que el usuario quiere mantener
+        // Manejo imagenes
+
+        // Imágenes que el usuario quiere conservar
         List<String> finalImages = new ArrayList<>();
 
-        if (patch.getKeepImages() != null) {
-            // Solo conservar las que existen realmente en el producto
-            for (String img : patch.getKeepImages()) {
-                if (product.getImages() != null && product.getImages().contains(img)) {
-                    finalImages.add(img);
-                }
-            }
+        if (patch.getImages() != null) {
+            finalImages.addAll(patch.getImages());
         } else {
-            // Si no se envió keepImages, se asume que quiere conservar todo
+            // Si no mandó imágenes, se asume que quiere conservar todas
             if (product.getImages() != null) {
                 finalImages.addAll(product.getImages());
             }
         }
 
-        // Agregar las nuevas imágenes subidas vía multipart
+        // Imágenes nuevas subidas por multipart
         if (patchImages != null && !patchImages.isEmpty()) {
             List<String> newImages = fileToS3(patchImages);
             finalImages.addAll(newImages);
         }
 
-        // Validar y guardar
+        // Guardar el resultado final
         validateImageLengths(finalImages, 2048);
         product.setImages(finalImages);
 
